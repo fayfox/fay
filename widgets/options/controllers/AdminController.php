@@ -2,19 +2,20 @@
 namespace fay\widgets\options\controllers;
 
 use fay\widget\Widget;
-use fay\services\Flash;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		//获取默认模版
-		if(empty($config['template'])){
-			$config['template'] = file_get_contents(__DIR__.'/../views/index/template.php');
-			$this->form->setData(array(
-				'template'=>$config['template'],
-			), true);
-		}
+	public function initConfig($config){
+		empty($config['title']) && $config['title'] = '';
+		empty($config['data']) && $config['data'] = array();
 		
-		$this->view->config = $config;
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
 		$this->view->render();
 	}
 	
@@ -31,12 +32,12 @@ class AdminController extends Widget{
 			);
 		}
 		
-		if(str_replace("\r", '', $data['template']) == str_replace("\r", '', file_get_contents(__DIR__.'/../views/index/template.php'))){
+		if($this->isDefaultTemplate($data['template'])){
 			$data['template'] = '';
 		}
 		
-		$this->setConfig($data);
-		Flash::set('编辑成功', 'success');
+		$this->saveConfig($data);
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){

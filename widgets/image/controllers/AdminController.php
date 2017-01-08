@@ -2,12 +2,19 @@
 namespace fay\widgets\image\controllers;
 
 use fay\widget\Widget;
-use fay\services\Flash;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
+	public function initConfig($config){
 		isset($config['file_id']) || $config['file_id'] = 0;
-		$this->view->config = $config;
+		
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
 		$this->view->render();
 	}
 	
@@ -15,8 +22,16 @@ class AdminController extends Widget{
 	 * 当有post提交的时候，会自动调用此方法
 	 */
 	public function onPost(){
-		$this->setConfig($this->form->getFilteredData());
-		Flash::set('编辑成功', 'success');
+		$data = $this->form->getFilteredData();
+		
+		//若模版与默认模版一致，不保存
+		if($this->isDefaultTemplate($data['template'])){
+			$data['template'] = '';
+		}
+		
+		$this->saveConfig($data);
+		
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){
@@ -41,6 +56,7 @@ class AdminController extends Widget{
 			'height'=>'intval',
 			'link'=>'trim',
 			'target'=>'trim',
+			'template'=>'trim',
 		);
 	}
 }

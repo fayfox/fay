@@ -2,15 +2,14 @@
 namespace fay\widgets\tag_post_list\controllers;
 
 use fay\helpers\ArrayHelper;
-use fay\models\tables\Tags;
-use fay\services\Post;
+use fay\models\tables\TagsTable;
+use fay\services\PostService;
 use fay\widget\Widget;
 use fay\core\Sql;
 use fay\common\ListView;
-use fay\models\tables\Posts;
-use fay\services\Category;
-use fay\services\User;
-use fay\helpers\Date;
+use fay\models\tables\PostsTable;
+use fay\services\CategoryService;
+use fay\helpers\DateHelper;
 use fay\core\HttpException;
 
 class IndexController extends Widget{
@@ -59,15 +58,23 @@ class IndexController extends Widget{
 		'views'=>'views DESC, publish_time DESC',
 	);
 	
-	/**
-	 * 配置信息
-	 */
-	private $config;
-	
-	public function getData($config){
-		//初始化配置
-		$this->initConfig($config);
+	public function initConfig($config){
+		empty($config['tag_title_key']) && $config['tag_title_key'] = 'tag_title';
+		empty($config['tag_id_key']) && $config['tag_id_key'] = 'tag_id';
+		empty($config['page_size']) && $config['page_size'] = 10;
+		empty($config['page_key']) && $config['page_key'] = 'page';
+		empty($config['uri']) && $config['uri'] = 'post/{$id}';
+		empty($config['date_format']) && $config['date_format'] = 'pretty';
+		isset($config['fields']) || $config['fields'] = array('category');
+		empty($config['pager']) && $config['pager'] = 'system';
+		empty($config['pager_template']) && $config['pager_template'] = '';
+		empty($config['empty_text']) && $config['empty_text'] = '无相关记录！';
+		empty($config['cat_id']) && $config['cat_id'] = 0;
 		
+		return $this->config = $config;
+	}
+	
+	public function getData(){
 		$listview = $this->getListView();
 		//获取符合条件的文章ID
 		$posts = $listview->getData();
@@ -75,7 +82,7 @@ class IndexController extends Widget{
 		if($posts){
 			$fields = $this->getFields();
 			//通过文章ID，获取文章信息结构
-			$posts = Post::service()->mget(ArrayHelper::column($posts, 'post_id'), $fields);
+			$posts = PostService::service()->mget(ArrayHelper::column($posts, 'post_id'), $fields);
 			//格式化返回数据结构
 			$posts = $this->formatPosts($posts);
 		}
@@ -86,10 +93,7 @@ class IndexController extends Widget{
 		);
 	}
 	
-	public function index($config){
-		//初始化配置
-		$this->initConfig($config);
-		
+	public function index(){
 		$listview = $this->getListView();
 		//获取符合条件的文章ID
 		$posts = $listview->getData();
@@ -97,31 +101,13 @@ class IndexController extends Widget{
 		if($posts){
 			$fields = $this->getFields();
 			//通过文章ID，获取文章信息结构
-			$posts = Post::service()->mget(ArrayHelper::column($posts, 'post_id'), $fields);
+			$posts = PostService::service()->mget(ArrayHelper::column($posts, 'post_id'), $fields);
 			//格式化返回数据结构
 			$posts = $this->formatPosts($posts);
 			
-			//template
-			if(empty($this->config['template'])){
-				$this->view->render('template', array(
-					'posts'=>$posts,
-					'config'=>$this->config,
-					'alias'=>$this->alias,
-					'listview'=>$listview,
-				));
-			}else{
-				if(preg_match('/^[\w_-]+(\/[\w_-]+)+$/', $this->config['template'])){
-					\F::app()->view->renderPartial($this->config['template'], array(
-						'posts'=>$posts,
-						'config'=>$this->config,
-						'alias'=>$this->alias,
-						'listview'=>$listview,
-					));
-				}else{
-					$alias = $this->alias;
-					eval('?>'.$this->config['template'].'<?php ');
-				}
-			}
+			$this->renderTemplate(array(
+				'posts'=>$posts,
+			));
 		}else{
 			echo $this->config['empty_text'];
 		}
@@ -137,32 +123,11 @@ class IndexController extends Widget{
 					'alias'=>$this->alias,
 				));
 			}else{
-				$alias = $this->alias;
-				extract($pager_data);
-				eval('?>'.$this->config['pager_template'].'<?php ');
+				\F::app()->view->evalCode($this->config['pager_template'], array(
+					'widget'=>$this
+				) + $pager_data);
 			}
 		}
-	}
-	
-	/**
-	 * 初始化配置
-	 * @param array $config
-	 * @return array
-	 */
-	private function initConfig($config){
-		empty($config['tag_title_key']) && $config['tag_title_key'] = 'tag_title';
-		empty($config['tag_id_key']) && $config['tag_id_key'] = 'tag_id';
-		empty($config['page_size']) && $config['page_size'] = 10;
-		empty($config['page_key']) && $config['page_key'] = 'page';
-		empty($config['uri']) && $config['uri'] = 'post/{$id}';
-		empty($config['date_format']) && $config['date_format'] = 'pretty';
-		isset($config['fields']) || $config['fields'] = array('category');
-		empty($config['pager']) && $config['pager'] = 'system';
-		empty($config['pager_template']) && $config['pager_template'] = '';
-		empty($config['empty_text']) && $config['empty_text'] = '无相关记录！';
-		empty($config['cat_id']) && $config['cat_id'] = 0;
-		
-		return $this->config = $config;
 	}
 	
 	/**
@@ -206,6 +171,18 @@ class IndexController extends Widget{
 		if(in_array('user', $this->config['fields'])){
 			$fields['user'] = $this->fields['user'];
 		}
+		//标签
+		if(in_array('tags', $this->config['fields'])){
+			$fields['tags'] = $this->fields['tags'];
+		}
+		//附加属性
+		if(in_array('props', $this->config['fields'])){
+			$fields['props'] = array(
+				'fields'=>array(
+					'*'
+				)
+			);
+		}
 		//附件缩略图
 		if(in_array('files', $this->config['fields'])){
 			$file_fields = $this->fields['files'];
@@ -233,7 +210,7 @@ class IndexController extends Widget{
 		if(!empty($this->config['tag_id_key']) && $this->input->get($this->config['tag_id_key'])){
 			$tag_id = $this->input->get($this->config['tag_id_key'], 'intval');
 		}else if(!empty($this->config['tag_title_key']) && $this->input->get($this->config['tag_title_key'])){
-			$tag = Tags::model()->fetchRow(array(
+			$tag = TagsTable::model()->fetchRow(array(
 				'title = ?'=>$this->input->get($this->config['tag_title_key'])
 			), 'id');
 			if(!$tag){
@@ -252,11 +229,11 @@ class IndexController extends Widget{
 		$sql->from(array('pt'=>'posts_tags'), 'post_id')
 			->joinLeft(array('p'=>'posts'), 'pt.post_id = p.id')
 			->where('tag_id = ?', $tag_id)
-			->where(Posts::getPublishedConditions('p'))
+			->where(PostsTable::getPublishedConditions('p'))
 			->order($this->getOrder())
 		;
 		if($this->config['cat_id']){
-			$cat_ids = Category::service()->getChildIds($this->config['cat_id']);
+			$cat_ids = CategoryService::service()->getChildIds($this->config['cat_id']);
 			$cat_ids[] = $this->config['cat_id'];
 			$sql->where('p.cat_id IN (?)', $cat_ids);
 		}
@@ -278,7 +255,7 @@ class IndexController extends Widget{
 		foreach($posts as &$p){
 			//附加格式化日期
 			if($this->config['date_format'] == 'pretty'){
-				$p['post']['format_publish_time'] = Date::niceShort($p['post']['publish_time']);
+				$p['post']['format_publish_time'] = DateHelper::niceShort($p['post']['publish_time']);
 			}else if($this->config['date_format']){
 				$p['post']['format_publish_time'] = \date($this->config['date_format'], $p['post']['publish_time']);
 			}else{

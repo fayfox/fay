@@ -1,6 +1,8 @@
 <?php
 namespace fay\core;
 
+use fay\helpers\RuntimeHelper;
+
 class Bootstrap{
 	public function init(){
 		//默认时区
@@ -18,9 +20,10 @@ class Bootstrap{
 		
 		//路由
 		$uri = new Uri();
+		RuntimeHelper::append(__FILE__, __LINE__, '路由解析完成');
 		
-		//hook
-		Hook::getInstance()->call('after_uri');
+		//触发事件
+		\F::event()->trigger('after_uri');
 		
 		if(!$uri->router){
 			//路由解析失败
@@ -46,10 +49,14 @@ class Bootstrap{
 		}
 		
 		$file = $this->getControllerAndAction($uri);
+		RuntimeHelper::append(__FILE__, __LINE__, '获取控制器名称');
+		
 		$controller = new $file['controller'];
-		//hook
-		Hook::getInstance()->call('after_controller_constructor');
+		RuntimeHelper::append(__FILE__, __LINE__, '控制器被实例化');
+		//触发事件
+		\F::event()->trigger('after_controller_constructor');
 		$controller->{$file['action']}();
+		RuntimeHelper::append(__FILE__, __LINE__, '控制器方式执行完毕');
 	}
 	
 	/**

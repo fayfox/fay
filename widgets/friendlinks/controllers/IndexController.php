@@ -2,12 +2,15 @@
 namespace fay\widgets\friendlinks\controllers;
 
 use fay\widget\Widget;
-use fay\services\Link;
+use fay\services\LinkService;
 
 class IndexController extends Widget{
-	public $eval_cat_uri = '';
-	
-	public function index($config){
+	/**
+	 * 初始化配置
+	 * @param array $config
+	 * @return array
+	 */
+	public function initConfig($config){
 		//title
 		if(empty($config['title'])){
 			$config['title'] = '友情链接';
@@ -21,31 +24,23 @@ class IndexController extends Widget{
 			$config['cat_id'] = 0;
 		}
 		
-		$links = Link::service()->get($config['cat_id'], $config['number']);
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
+		$links = LinkService::service()->get($this->config['cat_id'], $this->config['number']);
 		
 		//若内容可显示，则不显示该widget
 		if(empty($links)){
 			return;
 		}
 		
-		if(empty($config['template'])){
-			$this->view->render('template', array(
-				'links'=>$links,
-				'config'=>$config,
-				'alias'=>$this->alias,
-			));
-		}else{
-			if(preg_match('/^[\w_-]+(\/[\w_-]+)+$/', $config['template'])){
-				\F::app()->view->renderPartial($config['template'], array(
-					'links'=>$links,
-					'config'=>$config,
-					'alias'=>$this->alias,
-				));
-			}else{
-				$alias = $this->alias;
-				eval('?>'.$config['template'].'<?php ');
-			}
-		}
+		$this->renderTemplate(array(
+			'links'=>$links,
+		));
 	}
 	
 }

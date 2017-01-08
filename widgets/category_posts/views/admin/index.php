@@ -1,7 +1,7 @@
 <?php
-use fay\helpers\Html;
-use fay\models\tables\Roles;
-use fay\services\user\Role;
+use fay\helpers\HtmlHelper;
+use fay\models\tables\RolesTable;
+use fay\services\user\UserRoleService;
 ?>
 <div class="box">
 	<div class="box-title">
@@ -17,7 +17,7 @@ use fay\services\user\Role;
 		</div>
 		<div class="form-field">
 			<label class="title bold">分类</label>
-			<?php echo F::form('widget')->select('cat_id', Html::getSelectOptions($cats), array(
+			<?php echo F::form('widget')->select('cat_id', HtmlHelper::getSelectOptions($cats), array(
 				'class'=>'form-control mw400',
 			))?>
 		</div>
@@ -91,7 +91,7 @@ use fay\services\user\Role;
 		<div class="form-field">
 			<a href="javascript:;" class="toggle-advance" style="text-decoration:underline;">高级设置</a>
 		</div>
-		<div class="advance <?php if(!Role::service()->is(Roles::ITEM_SUPER_ADMIN))echo 'hide';?>">
+		<div class="advance <?php if(!UserRoleService::service()->is(RolesTable::ITEM_SUPER_ADMIN))echo 'hide';?>">
 			<div class="form-field">
 				<label class="title bold">分类字段</label>
 				<?php echo F::form('widget')->inputText('cat_key', array(
@@ -121,18 +121,18 @@ use fay\services\user\Role;
 			<div class="form-field">
 				<label class="title bold">链接格式<span class="fc-red">（若非开发人员，请不要修改此配置）</span></label>
 				<?php
-					echo Html::inputRadio('uri', 'post/{$id}', !isset($config['uri']) || $config['uri'] == 'post/{$id}', array(
+					echo HtmlHelper::inputRadio('uri', 'post/{$id}', !isset($config['uri']) || $config['uri'] == 'post/{$id}', array(
 						'label'=>'post/{$id}',
 					));
-					echo Html::inputRadio('uri', 'post-{$id}', isset($config['uri']) && $config['uri'] == 'post-{$id}', array(
+					echo HtmlHelper::inputRadio('uri', 'post-{$id}', isset($config['uri']) && $config['uri'] == 'post-{$id}', array(
 						'label'=>'post-{$id}',
 					));
-					echo Html::inputRadio('uri', '', isset($config['uri']) && !in_array($config['uri'], array(
+					echo HtmlHelper::inputRadio('uri', '', isset($config['uri']) && !in_array($config['uri'], array(
 						'post/{$id}', 'post-{$id}',
 					)), array(
 						'label'=>'其它',
 					));
-					echo Html::inputText('other_uri', isset($config['uri']) && !in_array($config['uri'], array(
+					echo HtmlHelper::inputText('other_uri', isset($config['uri']) && !in_array($config['uri'], array(
 						'post/{$id}', 'post-{$id}',
 					)) ? $config['uri'] : '', array(
 						'class'=>'form-control mw150 ib',
@@ -172,6 +172,12 @@ use fay\services\user\Role;
 				));
 				echo F::form('widget')->inputCheckbox('fields[]', 'meta', array(
 					'label'=>'计数（评论数/阅读数/点赞数）',
+				));
+				echo F::form('widget')->inputCheckbox('fields[]', 'tags', array(
+					'label'=>'标签',
+				));
+				echo F::form('widget')->inputCheckbox('fields[]', 'props', array(
+					'label'=>'附加属性',
 				));
 				?>
 				<p class="fc-grey">仅勾选模版中用到的字段，可以加快程序效率。</p>

@@ -1,11 +1,10 @@
 <?php
 namespace fay\widget;
 
-use fay\core\Config;
 use fay\core\Db;
 use fay\core\Input;
-use fay\helpers\Request;
-use fay\models\tables\Widgets;
+use fay\helpers\RequestHelper;
+use fay\models\tables\WidgetsTable;
 
 abstract class Widget{
 	/**
@@ -56,6 +55,11 @@ abstract class Widget{
 	public $_index;
 	
 	/**
+	 * 配置信息
+	 */
+	public $config = array();
+	
+	/**
 	 * 当前时间
 	 * @var int
 	 */
@@ -76,7 +80,9 @@ abstract class Widget{
 		}
 		
 		include_once 'View.php';
-		$this->view = new View($this->name, get_class($this));
+		$this->view = new View($this->name);
+		//将Controller实例传递给view
+		$this->view->assign(array('widget'=>$this));
 		$this->input = Input::getInstance();
 		$this->db = Db::getInstance();
 		$this->form = $this->form('widget');
@@ -84,7 +90,7 @@ abstract class Widget{
 		$this->current_time = \F::app()->current_time;
 		
 		//当前用户登陆IP
-		$this->ip = Request::getIP();
+		$this->ip = RequestHelper::getIP();
 		
 		$this->init();
 	}
@@ -99,8 +105,8 @@ abstract class Widget{
 	 * 存储该widget实例的参数，参数以数组的方式传入
 	 * @param $data
 	 */
-	public function setConfig($data){
-		Widgets::model()->update(array(
+	public function saveConfig($data){
+		WidgetsTable::model()->update(array(
 			'options'=>json_encode($data),
 		), "alias = '{$this->alias}'");
 	}
@@ -109,7 +115,11 @@ abstract class Widget{
 	 * 获取该widget实例的参数，参数以数组方式返回，若未设置参数，返回空数组
 	 */
 	public function getConfig(){
-		$widget = Widgets::model()->fetchRow("alias = '{$this->alias}'", 'options');
+		if($this->config){
+			return $this->config;
+		}
+		
+		$widget = WidgetsTable::model()->fetchRow("alias = '{$this->alias}'", 'options');
 		if(isset($widget['options']) && $widget['options']){
 			return json_decode($widget['options'], true);
 		}else{
@@ -148,9 +158,73 @@ abstract class Widget{
 	}
 	
 	/**
-	 * 子类中实现，调用widget时自动执行此方法
-	 * @param array $config
-	 * @return
+	 * 初始化配置信息
+	 * @param $config
+	 * @return array
 	 */
-	abstract public function index($config);
+	public function initConfig($config){
+		return $this->config = $config ? $config : array();
+	}
+	
+	/**
+	 * 渲染模版
+	 * @param array $data
+	 * @throws \fay\core\ErrorException
+	 */
+	protected function renderTemplate($data = array()){
+		$this->view->assign($data);
+		
+		if(empty($this->config['template'])){
+			//未指定模版，渲染默认模版
+			$this->view->render('template');
+		}else{
+			if(preg_match('/^[\w_-]+(\/[\w_-]+)+$/', $this->config['template'])){
+				//指定的是项目内的路径
+				\F::app()->view->renderPartial($this->config['template'], $this->view->getViewData());
+			}else{
+				//直接eval源码
+				\F::app()->view->evalCode($this->config['template'], array(
+					'widget'=>$this,
+				));
+			}
+		}
+	}
+	
+	/**
+	 * 获取显示模版。若不存在，返回空字符串
+	 * @return string
+	 */
+	protected function getTemplate(){
+		if(empty($this->config['template'])){
+			return $this->getDefaultTemplate();
+		}else{
+			return $this->config['template'];
+		}
+	}
+	
+	/**
+	 * 获取默认模版
+	 * @return string
+	 */
+	public function getDefaultTemplate(){
+		if(file_exists($this->path . 'views/index/template.php')){
+			return file_get_contents($this->path . 'views/index/template.php');
+		}else{
+			return '';
+		}
+	}
+	
+	/**
+	 * 判断指定模版与默认模版是否一致
+	 * @param $template
+	 * @return bool
+	 */
+	protected function isDefaultTemplate($template){
+		return str_replace("\r", '', $template) == str_replace("\r", '', $this->getDefaultTemplate());
+	}
+	
+	/**
+	 * 子类中实现，调用widget时自动执行此方法
+	 */
+	abstract public function index();
 }

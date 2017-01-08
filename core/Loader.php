@@ -30,6 +30,7 @@ class Loader{
 	
 	/**
 	 * 引入一个第三方文件
+	 * 理论上composer标准类库都是支持autoload的，但是有时候需要用到一些并不规范的类库
 	 * 本质上是从vendor文件夹包含一个文件进来
 	 * @param string $name
 	 * @throws ErrorException
@@ -37,8 +38,8 @@ class Loader{
 	public static function vendor($name){
 		if(file_exists(APPLICATION_PATH . "{$name}.php")){
 			require_once APPLICATION_PATH . "{$name}.php";
-		}else if(file_exists(SYSTEM_PATH . "{$name}.php")){
-			require_once SYSTEM_PATH . "{$name}.php";
+		}else if(file_exists(VENDOR_PATH . "{$name}.php")){
+			require_once VENDOR_PATH . "{$name}.php";
 		}else{
 			throw new ErrorException("File '{$name}' not found");
 		}

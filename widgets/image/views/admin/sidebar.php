@@ -1,5 +1,5 @@
 <?php
-use fay\helpers\Html;
+use fay\helpers\HtmlHelper;
 ?>
 <div class="box" id="box-publish-time" data-name="publish-time">
 	<div class="box-title">
@@ -24,7 +24,6 @@ use fay\helpers\Html;
 </div>
 <div class="box" id="box-tags">
 	<div class="box-title">
-		<a class="tools toggle" title="点击以切换"></a>
 		<h4>图片大小</h4>
 	</div>
 	<div class="box-content">
@@ -32,11 +31,11 @@ use fay\helpers\Html;
 			<tr>
 				<th>宽x高</th>
 				<td>
-					<?php echo Html::inputText('width', isset($data['width']) ? $data['width'] : '', array(
+					<?php echo F::form('widget')->inputText('width', array(
 						'class'=>'form-control w50 ib',
 					))?>
 					x
-					<?php echo Html::inputText('height', isset($data['height']) ? $data['height'] : '', array(
+					<?php echo F::form('widget')->inputText('height', array(
 						'class'=>'form-control w50 ib',
 					))?>
 					<a href="javascript:;" title="原始尺寸" id="refresh-size"><i class="fa fa-refresh"></i></a>
@@ -47,9 +46,9 @@ use fay\helpers\Html;
 </div>
 <script>
 $(function(){
-	$(document).delegate("#refresh-size", "click", function(){
+	$(document).on('click', '#refresh-size', function(){
 		var image = new Image();
-		image.src = $("#file-preview img").attr("src");
+		image.src = $('#file-preview img').attr('src');
 		$("input[name='width']").val(image.width);
 		$("input[name='height']").val(image.height);
 	});

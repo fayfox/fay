@@ -4,15 +4,17 @@ namespace fay\widgets\text\controllers;
 use fay\widget\Widget;
 
 class IndexController extends Widget{
-	public function getData($config){
-		return $config['content'];
+	public function initConfig($config){
+		empty($config['content']) && $config['content'] = '';
+		
+		return $this->config = $config;
 	}
 	
-	public function index($config){
-		$this->view->assign(array(
-			'config'=>$config,
-			'alias'=>$this->alias,
-			'_index'=>$this->_index,
-		))->render();
+	public function getData(){
+		return $this->config['content'];
+	}
+	
+	public function index(){
+		$this->renderTemplate();
 	}
 }

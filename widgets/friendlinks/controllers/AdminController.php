@@ -2,26 +2,26 @@
 namespace fay\widgets\friendlinks\controllers;
 
 use fay\widget\Widget;
-use fay\services\Category;
-use fay\services\Flash;
+use fay\services\CategoryService;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		$root_node = Category::service()->getByAlias('_system_link', 'id');
+	public function initConfig($config){
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
+		$root_node = CategoryService::service()->getByAlias('_system_link', 'id');
 		$this->view->cats = array(
 			array(
 				'id'=>0,
 				'title'=>'不限制分类',
-				'children'=>Category::service()->getTreeByParentId($root_node['id']),
+				'children'=>CategoryService::service()->getTreeByParentId($root_node['id']),
 			),
 		);
-		
-		//获取默认模版
-		if(empty($config['template'])){
-			$config['template'] = file_get_contents(__DIR__.'/../views/index/template.php');
-		}
-		
-		$this->view->config = $config;
 		
 		$this->view->render();
 	}
@@ -30,29 +30,20 @@ class AdminController extends Widget{
 	 * 当有post提交的时候，会自动调用此方法
 	 */
 	public function onPost(){
-		$uri = 'cat/{$id}';
-		if($this->input->post('uri')){
-			$uri = $this->input->post('uri');
-		}else if($this->input->post('other_uri')){
-			$uri = $this->input->post('other_uri');
-		}
+		$data = $this->form->getFilteredData();
+		
 		//若模版与默认模版一致，不保存
-		$template = $this->input->post('template');
-		if(str_replace("\r", '', $template) == str_replace("\r", '', file_get_contents(__DIR__.'/../views/index/template.php'))){
-			$template = '';
+		if($this->isDefaultTemplate($data['template'])){
+			$data['template'] = '';
 		}
-		$this->setConfig(array(
-			'title'=>$this->input->post('title', null, ''),
-			'number'=>$this->input->post('number', 'intval', 5),
-			'cat_id'=>$this->input->post('cat_id', 'intval', 0),
-			'template'=>$template,
-		));
-		Flash::set('编辑成功', 'success');
+		
+		$this->saveConfig($data);
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){
 		return array(
-			array('number', 'int', array('min'=>1, 'max'=>20)),
+			array('number', 'int', array('min'=>1, 'max'=>50)),
 		);
 	}
 	
@@ -66,6 +57,7 @@ class AdminController extends Widget{
 		return array(
 			'title'=>'',
 			'number'=>'intval',
+			'cat_id'=>'intval',
 			'template'=>'trim',
 		);
 	}

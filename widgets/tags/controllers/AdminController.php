@@ -2,29 +2,21 @@
 namespace fay\widgets\tags\controllers;
 
 use fay\widget\Widget;
-use fay\services\Category;
-use fay\services\Flash;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		$root_node = Category::service()->getByAlias('_system_post', 'id');
-		$this->view->cats = array(
-			array(
-				'id'=>$root_node['id'],
-				'title'=>'顶级',
-				'children'=>Category::service()->getTreeByParentId($root_node['id']),
-			),
-		);
+	public function initConfig($config){
+		empty($config['number']) && $config['number'] = 10;
+		empty($config['uri']) && $config['uri'] = 'tag/{$title}';
+		empty($config['title']) && $config['title'] = '';
 		
-		//获取默认模版
-		if(empty($config['template'])){
-			$config['template'] = file_get_contents(__DIR__.'/../views/index/template.php');
-			$this->form->setData(array(
-				'template'=>$config['template'],
-			), true);
-		}
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
 		
-		$this->view->config = $config;
+		return $this->config = $config;
+	}
+	
+	public function index(){
 		$this->view->render();
 	}
 	
@@ -32,16 +24,16 @@ class AdminController extends Widget{
 	 * 当有post提交的时候，会自动调用此方法
 	 */
 	public function onPost(){
-		$data = $this->form()->getFilteredData();
+		$data = $this->form->getFilteredData();
 		$data['uri'] || $data['uri'] = $this->input->post('other_uri');
 		
 		//若模版与默认模版一致，不保存
-		if(str_replace("\r", '', $data['template']) == str_replace("\r", '', file_get_contents(__DIR__.'/../views/index/template.php'))){
+		if($this->isDefaultTemplate($data['template'])){
 			$data['template'] = '';
 		}
 		
-		$this->setConfig($data);
-		Flash::set('编辑成功', 'success');
+		$this->saveConfig($data);
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){
@@ -56,6 +48,7 @@ class AdminController extends Widget{
 			'number'=>'数量',
 			'uri'=>'链接格式',
 			'template'=>'渲染模版',
+			'order'=>'排序方式',
 		);
 	}
 	
@@ -65,6 +58,7 @@ class AdminController extends Widget{
 			'number'=>'intval',
 			'uri'=>'trim',
 			'template'=>'trim',
+			'order'=>'trim',
 		);
 	}
 }

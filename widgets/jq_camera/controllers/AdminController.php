@@ -2,11 +2,23 @@
 namespace fay\widgets\jq_camera\controllers;
 
 use fay\widget\Widget;
-use fay\services\Flash;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		$this->view->config = $config;
+	public function initConfig($config){
+		empty($config['files']) && $config['files'] = array();
+		isset($config['height']) || $config['height'] = 450;
+		isset($config['transPeriod']) || $config['transPeriod'] = 800;
+		isset($config['time']) || $config['time'] = 5000;
+		isset($config['fx']) || $config['fx'] = 'random';
+		
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
 		$this->view->render();
 	}
 	
@@ -27,8 +39,14 @@ class AdminController extends Widget{
 				'end_time'=>$end_times[$p] ? $end_times[$p] : 0,
 			);
 		}
-		$this->setConfig($data);
-		Flash::set('编辑成功', 'success');
+		
+		//若模版与默认模版一致，不保存
+		if($this->isDefaultTemplate($data['template'])){
+			$data['template'] = '';
+		}
+		
+		$this->saveConfig($data);
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){
@@ -51,10 +69,12 @@ class AdminController extends Widget{
 	
 	public function filters(){
 		return array(
+			'element_id'=>'trim',
 			'height'=>'trim',
 			'transPeriod'=>'intval',
 			'time'=>'intval',
 			'fx'=>'trim',
+			'template'=>'trim',
 		);
 	}
 }

@@ -1,7 +1,7 @@
 <?php
-use fay\helpers\Html;
-use fay\models\tables\Roles;
-use fay\services\user\Role;
+use fay\helpers\HtmlHelper;
+use fay\models\tables\RolesTable;
+use fay\services\user\UserRoleService;
 ?>
 <div class="box">
 	<div class="box-title">
@@ -17,7 +17,7 @@ use fay\services\user\Role;
 		</div>
 		<div class="form-field">
 			<label class="title bold">顶级分类</label>
-			<?php echo F::form('widget')->select('top', Html::getSelectOptions($cats), array(
+			<?php echo F::form('widget')->select('top', HtmlHelper::getSelectOptions($cats), array(
 				'class'=>'form-control mw400',
 			))?>
 			<p class="fc-grey">仅显示所选分类的子分类（不包含所选分类本身）</p>
@@ -35,30 +35,30 @@ use fay\services\user\Role;
 			<a href="javascript:;" class="toggle-advance" style="text-decoration:underline;">高级设置</a>
 			<span class="fc-red">（若非开发人员，请不要修改以下配置）</span>
 		</div>
-		<div class="advance <?php if(!Role::service()->is(Roles::ITEM_SUPER_ADMIN))echo 'hide';?>">
+		<div class="advance <?php if(!UserRoleService::service()->is(RolesTable::ITEM_SUPER_ADMIN))echo 'hide';?>">
 			<div class="form-field">
 				<label class="title bold">链接格式</label>
 				<?php
-					echo Html::inputRadio('uri', 'cat/{$id}', !isset($config['uri']) || $config['uri'] == 'cat/{$id}', array(
+					echo HtmlHelper::inputRadio('uri', 'cat/{$id}', !isset($widget->config['uri']) || $widget->config['uri'] == 'cat/{$id}', array(
 						'label'=>'cat/{$id}',
 					));
-					echo Html::inputRadio('uri', 'cat/{$alias}', isset($config['uri']) && $config['uri'] == 'cat/{$alias}', array(
+					echo HtmlHelper::inputRadio('uri', 'cat/{$alias}', isset($widget->config['uri']) && $widget->config['uri'] == 'cat/{$alias}', array(
 						'label'=>'cat/{$alias}',
 					));
-					echo Html::inputRadio('uri', 'cat-{$id}', isset($config['uri']) && $config['uri'] == 'cat-{$id}', array(
+					echo HtmlHelper::inputRadio('uri', 'cat-{$id}', isset($widget->config['uri']) && $widget->config['uri'] == 'cat-{$id}', array(
 						'label'=>'cat-{$id}',
 					));
-					echo Html::inputRadio('uri', 'cat-{$alias}', isset($config['uri']) && $config['uri'] == 'cat-{$alias}', array(
+					echo HtmlHelper::inputRadio('uri', 'cat-{$alias}', isset($widget->config['uri']) && $widget->config['uri'] == 'cat-{$alias}', array(
 						'label'=>'cat-{$alias}',
 					));
-					echo Html::inputRadio('uri', '', isset($config['uri']) && !in_array($config['uri'], array(
+					echo HtmlHelper::inputRadio('uri', '', isset($widget->config['uri']) && !in_array($widget->config['uri'], array(
 						'cat/{$id}', 'cat/{$alias}', 'cat-{$id}', 'cat-{$alias}',
 					)), array(
 						'label'=>'其它',
 					));
-					echo Html::inputText('other_uri', isset($config['uri']) && !in_array($config['uri'], array(
+					echo HtmlHelper::inputText('other_uri', isset($widget->config['uri']) && !in_array($widget->config['uri'], array(
 						'cat/{$id}', 'cat/{$alias}', 'cat-{$id}', 'cat-{$alias}',
-					)) ? $config['uri'] : '', array(
+					)) ? $widget->config['uri'] : '', array(
 						'class'=>'form-control mw150 ib',
 					));
 				?>
@@ -71,7 +71,7 @@ use fay\services\user\Role;
 			</div>
 			<div class="form-field">
 				<label class="title bold">渲染模版</label>
-				<?php echo Html::textarea('template', isset($config['template']) ? $config['template'] : '', array(
+				<?php echo F::form('widget')->textarea('template', array(
 					'class'=>'form-control h90 autosize',
 					'id'=>'code-editor',
 				))?>

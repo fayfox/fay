@@ -2,11 +2,26 @@
 namespace fay\widgets\jq_nivo_slider\controllers;
 
 use fay\widget\Widget;
-use fay\services\Flash;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		$this->view->config = $config;
+	public function initConfig($config){
+		empty($config['files']) && $config['files'] = array();
+		isset($config['element_id']) || $config['element_id'] = '';
+		isset($config['animSpeed']) || $config['animSpeed'] = 500;
+		isset($config['pauseTime']) || $config['pauseTime'] = 5000;
+		isset($config['effect']) || $config['effect'] = 'random';
+		isset($config['directionNav']) || $config['directionNav'] = 1;
+		isset($config['width']) || $config['width'] = 0;
+		isset($config['height']) || $config['height'] = 0;
+		
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
 		$this->view->render();
 	}
 	
@@ -28,8 +43,13 @@ class AdminController extends Widget{
 			);
 		}
 		
-		$this->setConfig($data);
-		Flash::set('编辑成功', 'success');
+		//若模版与默认模版一致，不保存
+		if($this->isDefaultTemplate($data['template'])){
+			$data['template'] = '';
+		}
+		
+		$this->saveConfig($data);
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){
@@ -55,13 +75,14 @@ class AdminController extends Widget{
 	
 	public function filters(){
 		return array(
+			'element_id'=>'trim',
 			'animSpeed'=>'intval',
 			'pauseTime'=>'intval',
 			'effect'=>'trim',
-			'element_id'=>'trim',
 			'directionNav'=>'intval',
 			'width'=>'intval',
 			'height'=>'intval',
+			'template'=>'trim',
 		);
 	}
 }

@@ -2,26 +2,30 @@
 namespace fay\widgets\category_pages\controllers;
 
 use fay\widget\Widget;
-use fay\services\Category;
-use fay\services\Flash;
+use fay\services\CategoryService;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		$root_node = Category::service()->getByAlias('_system_page', 'id');
+	public function initConfig($config){
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
+		$root_node = CategoryService::service()->getByAlias('_system_page', 'id');
 		$this->view->cats = array(
 			array(
 				'id'=>$root_node['id'],
 				'title'=>'顶级',
-				'children'=>Category::service()->getTreeByParentId($root_node['id']),
+				'children'=>CategoryService::service()->getTreeByParentId($root_node['id']),
 			),
 		);
 		
 		//获取默认模版
 		if(empty($config['template'])){
 			$config['template'] = file_get_contents(__DIR__.'/../views/index/template.php');
-			$this->form->setData(array(
-				'template'=>$config['template'],
-			), true);
 		}
 		
 		$this->view->config = $config;
@@ -35,12 +39,12 @@ class AdminController extends Widget{
 		$data = $this->form->getFilteredData();
 		$data['uri'] || $data['uri'] = empty($data['other_uri']) ? 'page/{$id}' : $data['other_uri'];
 		//若模版与默认模版一致，不保存
-		if(str_replace("\r", '', $data['template']) == str_replace("\r", '', file_get_contents(__DIR__.'/../views/index/template.php'))){
+		if($this->isDefaultTemplate($data['template'])){
 			$data['template'] = '';
 		}
-		$this->setConfig($data);
+		$this->saveConfig($data);
 		
-		Flash::set('编辑成功', 'success');
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){

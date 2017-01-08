@@ -1,7 +1,7 @@
 <?php
-use fay\helpers\Html;
-use fay\models\tables\Roles;
-use fay\services\user\Role;
+use fay\helpers\HtmlHelper;
+use fay\models\tables\RolesTable;
+use fay\services\user\UserRoleService;
 ?>
 <div class="box">
 	<div class="box-title">
@@ -17,7 +17,7 @@ use fay\services\user\Role;
 		</div>
 		<div class="form-field">
 			<label class="title bold">分类</label>
-			<?php echo F::form('widget')->select('cat_id', Html::getSelectOptions($cats), array(
+			<?php echo F::form('widget')->select('cat_id', HtmlHelper::getSelectOptions($cats), array(
 				'class'=>'form-control mw400',
 			))?>
 		</div>
@@ -30,10 +30,10 @@ use fay\services\user\Role;
 		<div class="form-field">
 			<a href="javascript:;" class="toggle-advance" style="text-decoration:underline;">高级设置</a>
 		</div>
-		<div class="advance <?php if(!Role::service()->is(Roles::ITEM_SUPER_ADMIN))echo 'hide';?>">
+		<div class="advance <?php if(!UserRoleService::service()->is(RolesTable::ITEM_SUPER_ADMIN))echo 'hide';?>">
 			<div class="form-field">
 				<label class="title bold">渲染模版<span class="fc-red">（若非开发人员，请不要修改此配置）</span></label>
-				<?php echo Html::textarea('template', isset($config['template']) ? $config['template'] : '', array(
+				<?php echo F::form('widget')->textarea('template', array(
 					'class'=>'form-control h200 autosize',
 					'id'=>'code-editor',
 				))?>

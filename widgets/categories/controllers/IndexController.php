@@ -2,43 +2,19 @@
 namespace fay\widgets\categories\controllers;
 
 use fay\widget\Widget;
-use fay\services\Category;
+use fay\services\CategoryService;
 
 class IndexController extends Widget{
-	public function getData($config){
+	public function initConfig($config){
 		//root node
 		if(empty($config['top'])){
-			$root_node = Category::service()->getByAlias('_system_post', 'id');
-			$config['top'] = $root_node['id'];
-		}
-		
-		//uri
-		if(empty($config['uri'])){
-			$config['uri'] = 'cat/{$id}';
-		}
-		
-		if(!empty($config['hierarchical'])){
-			$cats = Category::service()->getTree($config['top']);
-		}else{
-			$cats = Category::service()->getChildren($config['top']);
-		}
-		
-		//格式化分类链接
-		$cats = $this->setLink($cats, $config['uri']);
-		
-		return $cats;
-	}
-	
-	public function index($config){
-		//root node
-		if(empty($config['top'])){
-			$root_node = Category::service()->getByAlias('_system_post', 'id');
+			$root_node = CategoryService::service()->getByAlias('_system_post', 'id');
 			$config['top'] = $root_node['id'];
 		}
 		
 		//title
 		if(empty($config['title'])){
-			$node = Category::service()->get($config['top'], 'title');
+			$node = CategoryService::service()->get($config['top'], 'title');
 			$config['title'] = $node['title'];
 		}
 		
@@ -47,38 +23,36 @@ class IndexController extends Widget{
 			$config['uri'] = 'cat/{$id}';
 		}
 		
-		if(!empty($config['hierarchical'])){
-			$cats = Category::service()->getTree($config['top']);
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function getData(){
+		if(!empty($this->config['hierarchical'])){
+			$cats = CategoryService::service()->getTree($this->config['top']);
 		}else{
-			$cats = Category::service()->getChildren($config['top']);
+			$cats = CategoryService::service()->getChildren($this->config['top']);
 		}
 		
 		//格式化分类链接
-		$cats = $this->setLink($cats, $config['uri']);
+		$cats = $this->setLink($cats, $this->config['uri']);
+		
+		return $cats;
+	}
+	
+	public function index(){
+		$cats = $this->getData();
 		
 		//若无分类可显示，则不显示该widget
 		if(empty($cats)){
 			return;
 		}
 		
-		if(empty($config['template'])){
-			$this->view->render('template', array(
-				'cats'=>$cats,
-				'config'=>$config,
-				'alias'=>$this->alias,
-			));
-		}else{
-			if(preg_match('/^[\w_-]+(\/[\w_-]+)+$/', $config['template'])){
-				\F::app()->view->renderPartial($config['template'], array(
-					'cats'=>$cats,
-					'config'=>$config,
-					'alias'=>$this->alias,
-				));
-			}else{
-				$alias = $this->alias;
-				eval('?>'.$config['template'].'<?php ');
-			}
-		}
+		$this->renderTemplate(array(
+			'cats'=>$cats,
+		));
 	}
 	
 	/**

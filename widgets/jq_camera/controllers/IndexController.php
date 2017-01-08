@@ -2,39 +2,46 @@
 namespace fay\widgets\jq_camera\controllers;
 
 use fay\widget\Widget;
-use fay\services\File;
+use fay\services\FileService;
 
 class IndexController extends Widget{
-	public function getData($config){
-		$data = empty($config['files']) ? array() : $config['files'];
-		foreach($data as $k => $d){
-			if((!empty($d['start_time']) && \F::app()->current_time < $d['start_time']) ||
-				(!empty($d['end_time']) && \F::app()->current_time > $d['end_time'])){
-				unset($data[$k]);
-				continue;
-			}
-			$data[$k]['src'] = File::getUrl($d['file_id'], (empty($config['width']) && empty($config['height'])) ? File::PIC_ORIGINAL : File::PIC_RESIZE, array(
-				'dw'=>empty($config['width']) ? false : $config['width'],
-				'dh'=>empty($config['height']) ?  false : $config['height'],
-			), true);
-		}
-		return $data;
+	public function initConfig($config){
+		empty($config['files']) && $config['files'] = array();
+		isset($config['element_id']) || $config['element_id'] = '';
+		isset($config['height']) || $config['height'] = 450;
+		isset($config['transPeriod']) || $config['transPeriod'] = 800;
+		isset($config['time']) || $config['time'] = 5000;
+		isset($config['fx']) || $config['fx'] = 'random';
+		
+		return $this->config = $config;
 	}
 	
-	public function index($config){
-		if(empty($config)){
-			$config = array();
-		}
-		empty($config['height']) && $config['height'] = 450;
-		empty($config['transPeriod']) && $config['transPeriod'] = 800;
-		empty($config['time']) && $config['time'] = 5000;
-		empty($config['fx']) && $config['fx'] = 'random';
+	public function getData(){
+		$files = $this->config['files'];
 		
-		$this->view->assign(array(
-			'config'=>$config,
-			'files'=>$this->getData($config),
-			'alias'=>$this->alias,
-			'_index'=>$this->_index,
-		))->render();
+		foreach($files as $k => $f){
+			if((!empty($f['start_time']) && \F::app()->current_time < $f['start_time']) ||
+				(!empty($f['end_time']) && \F::app()->current_time > $f['end_time'])){
+				unset($files[$k]);
+				continue;
+			}
+			
+			$files[$k]['src'] = FileService::getUrl($f['file_id'], (empty($this->config['width']) && empty($this->config['height'])) ? FileService::PIC_ORIGINAL : FileService::PIC_RESIZE, array(
+				'dw'=>empty($this->config['width']) ? false : $this->config['width'],
+				'dh'=>empty($this->config['height']) ?  false : $this->config['height'],
+			));
+		}
+		
+		$config = $this->config;
+		$config['files'] = $files;
+		return $config;
+	}
+	
+	public function index(){
+		$data = $this->getData();
+		
+		$this->renderTemplate(array(
+			'files'=>$data['files'],
+		));
 	}
 }

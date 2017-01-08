@@ -1,7 +1,12 @@
 <?php
-use fay\helpers\Html;
-use fay\models\tables\Roles;
-use fay\services\user\Role;
+use fay\helpers\HtmlHelper;
+use fay\models\tables\RolesTable;
+use fay\services\user\UserRoleService;
+
+/**
+ * @var $widget \fay\widgets\tag_post_list\controllers\AdminController
+ * @var $cats array
+ */
 ?>
 <div class="box">
 	<div class="box-title">
@@ -44,7 +49,7 @@ use fay\services\user\Role;
 			<a href="javascript:;" class="toggle-advance" style="text-decoration:underline;">高级设置</a>
 			<span class="fc-red">（若非开发人员，请不要修改以下配置）</span>
 		</div>
-		<div class="advance <?php if(!Role::service()->is(Roles::ITEM_SUPER_ADMIN))echo 'hide';?>">
+		<div class="advance <?php if(!UserRoleService::service()->is(RolesTable::ITEM_SUPER_ADMIN))echo 'hide';?>">
 			<div class="form-field">
 				<label class="title bold">标签名称字段</label>
 				<?php echo F::form('widget')->inputText('tag_title_key', array(
@@ -67,7 +72,7 @@ use fay\services\user\Role;
 			</div>
 			<div class="form-field">
 				<label class="title bold">限定分类</label>
-				<?php echo F::form('widget')->select('cat_id', Html::getSelectOptions($cats), array(
+				<?php echo F::form('widget')->select('cat_id', HtmlHelper::getSelectOptions($cats), array(
 					'class'=>'form-control mw400',
 				))?>
 				<p class="fc-grey">只查询该分类下的文章（包含子分类）</p>
@@ -83,20 +88,20 @@ use fay\services\user\Role;
 			<div class="form-field">
 				<label class="title bold">链接格式</label>
 				<?php
-					echo Html::inputRadio('uri', 'post/{$id}', !isset($config['uri']) || $config['uri'] == 'post/{$id}', array(
+					echo HtmlHelper::inputRadio('uri', 'post/{$id}', !isset($widget->config['uri']) || $widget->config['uri'] == 'post/{$id}', array(
 						'label'=>'post/{$id}',
 					));
-					echo Html::inputRadio('uri', 'post-{$id}', isset($config['uri']) && $config['uri'] == 'post-{$id}', array(
+					echo HtmlHelper::inputRadio('uri', 'post-{$id}', isset($widget->config['uri']) && $widget->config['uri'] == 'post-{$id}', array(
 						'label'=>'post-{$id}',
 					));
-					echo Html::inputRadio('uri', '', isset($config['uri']) && !in_array($config['uri'], array(
+					echo HtmlHelper::inputRadio('uri', '', isset($widget->config['uri']) && !in_array($widget->config['uri'], array(
 							'post/{$id}', 'post-{$id}',
 						)), array(
 						'label'=>'其它',
 					));
-					echo Html::inputText('other_uri', isset($config['uri']) && !in_array($config['uri'], array(
+					echo HtmlHelper::inputText('other_uri', isset($widget->config['uri']) && !in_array($widget->config['uri'], array(
 						'post/{$id}', 'post-{$id}',
-					)) ? $config['uri'] : '', array(
+					)) ? $widget->config['uri'] : '', array(
 						'class'=>'form-control mw150 ib',
 					));
 				?>
@@ -135,10 +140,16 @@ use fay\services\user\Role;
 				echo F::form('widget')->inputCheckbox('fields[]', 'meta', array(
 					'label'=>'计数（评论数/阅读数/点赞数）',
 				));
+				echo F::form('widget')->inputCheckbox('fields[]', 'tags', array(
+					'label'=>'标签',
+				));
+				echo F::form('widget')->inputCheckbox('fields[]', 'props', array(
+					'label'=>'附加属性',
+				));
 				?>
 				<p class="fc-grey">仅勾选模版中用到的字段，可以加快程序效率。</p>
 			</div>
-			<div class="form-field thumbnail-size-container <?php if(empty($config['fields']) || !in_array('files', $config['fields']))echo 'hide';?>">
+			<div class="form-field thumbnail-size-container <?php if(empty($widget->config['fields']) || !in_array('files', $widget->config['fields']))echo 'hide';?>">
 				<label class="title bold">附件缩略图尺寸</label>
 				<?php
 				echo F::form('widget')->inputText('file_thumbnail_width', array(
@@ -176,14 +187,14 @@ use fay\services\user\Role;
 			<div class="form-field">
 				<label class="title bold">分页条模版</label>
 				<p><?php
-					echo Html::inputRadio('pager', 'system', !isset($config['pager']) || $config['pager'] == 'system', array(
+					echo F::form('widget')->inputRadio('pager', 'system', array(
 						'label'=>'调用全局分页条',
 					));
-					echo Html::inputRadio('pager', 'custom', isset($config['pager']) && $config['pager'] == 'custom', array(
+					echo F::form('widget')->inputRadio('pager', 'custom', array(
 						'label'=>'小工具内自定义',
 					));
 				?></p>
-				<div id="pager-template-container" class="<?php if(!isset($config['pager']) || $config['pager'] == 'system')echo 'hide';?>">
+				<div id="pager-template-container" class="<?php if(!isset($widget->config['pager']) || $widget->config['pager'] == 'system')echo 'hide';?>">
 					<?php echo F::form('widget')->textarea('pager_template', array(
 						'class'=>'form-control h90 autosize',
 					))?>

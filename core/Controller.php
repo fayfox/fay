@@ -1,9 +1,9 @@
 <?php
 namespace fay\core;
 
-use fay\helpers\Request;
+use fay\helpers\RequestHelper;
 use fay\helpers\StringHelper;
-use fay\services\User;
+use fay\services\UserService;
 
 /**
  * @property View $view 视图
@@ -56,7 +56,7 @@ class Controller{
 		$this->config = Config::getInstance();
 		$this->current_time = time();
 		//当前用户登陆IP
-		$this->ip = Request::getIP();
+		$this->ip = RequestHelper::getIP();
 		
 		self::$_instance = $this;
 	}
@@ -94,7 +94,7 @@ class Controller{
 	 * @return bool
 	 */
 	public function checkPermission($router){
-		return User::service()->checkPermission($router);
+		return UserService::service()->checkPermission($router);
 	}
 	
 	/**

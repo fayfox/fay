@@ -2,21 +2,22 @@
 namespace fay\widgets\images\controllers;
 
 use fay\widget\Widget;
-use fay\services\Flash;
+use fay\services\FlashService;
 
 class AdminController extends Widget{
-	public function index($config){
-		//获取默认模版
-		if(empty($config['template'])){
-			$config['template'] = file_get_contents(__DIR__.'/../views/index/template.php');
-			$this->form->setData(array(
-				'template'=>$config['template'],
-			), true);
-		}
+	public function initConfig($config){
+		empty($config['files']) && $config['files'] = array();
+		$config['random'] = empty($config['random']) ? 0 : 1;
+		$config['limit'] = empty($config['limit']) ? 0 : $config['limit'];
 		
-		$this->view->assign(array(
-			'config'=>$config,
-		))->render();
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
+		$this->view->render();
 	}
 	
 	public function onPost(){
@@ -36,8 +37,14 @@ class AdminController extends Widget{
 				'end_time'=>$end_times[$p] ? $end_times[$p] : 0,
 			);
 		}
-		$this->setConfig($data);
-		Flash::set('编辑成功', 'success');
+		
+		//若模版与默认模版一致，不保存
+		if($this->isDefaultTemplate($data['template'])){
+			$data['template'] = '';
+		}
+		
+		$this->saveConfig($data);
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){
@@ -63,11 +70,11 @@ class AdminController extends Widget{
 	public function filters(){
 		return array(
 			'title'=>'trim',
-			'template'=>'trim',
 			'width'=>'intval',
 			'height'=>'intval',
 			'random'=>'intval',
 			'limit'=>'intval',
+			'template'=>'trim',
 		);
 	}
 }

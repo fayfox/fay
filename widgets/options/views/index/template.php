@@ -1,16 +1,19 @@
 <?php
-use fay\helpers\Html;
+use fay\helpers\HtmlHelper;
 
-if(!empty($title)){
-	echo Html::tag('h3', array(), Html::encode($title));
+/**
+ * @var $widget fay\widgets\options\controllers\IndexController
+ */
+
+if(!empty($widget->config['title'])){
+	echo HtmlHelper::tag('h3', array(), HtmlHelper::encode($widget->config['title']));
 }
-if(isset($data) && is_array($data)){
-	foreach($data as $d){
-		echo Html::tag('p', array(
-			'prepend'=>array(
-				'tag'=>'label',
-				'text'=>Html::encode($d['key']),
-			)
-		), Html::encode($d['value']));
-	}
+
+foreach($widget->config['data'] as $d){
+	echo HtmlHelper::tag('p', array(
+		'prepend'=>array(
+			'tag'=>'label',
+			'text'=>HtmlHelper::encode($d['key']),
+		)
+	), HtmlHelper::encode($d['value']));
 }

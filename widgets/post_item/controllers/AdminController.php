@@ -2,36 +2,38 @@
 namespace fay\widgets\post_item\controllers;
 
 use fay\widget\Widget;
-use fay\services\Flash;
-use fay\models\tables\Posts;
-use fay\services\Category;
+use fay\services\FlashService;
+use fay\models\tables\PostsTable;
+use fay\services\CategoryService;
 
 class AdminController extends Widget{
-	public function index($config){
-		//获取默认模版
-		if(empty($config['template'])){
-			$config['template'] = file_get_contents(__DIR__.'/../views/index/template.php');
-			$this->form->setData(array(
-				'template'=>$config['template'],
-			), true);
-		}
+	public function initConfig($config){
+		isset($config['id_key']) || $config['id_key'] = 'id';
+		empty($config['default_post_id']) && $config['default_post_id'] = '';
+		$config['inc_views'] = empty($config['inc_views']) ? 0 : 1;
+		empty($config['fields']) && $config['fields'] = array();
 		
-		$this->view->config = $config;
-
-		if(!empty($config['default_post_id'])){
-			$post = Posts::model()->find($config['default_post_id'], 'title');
+		if($config['default_post_id']){
+			$post = PostsTable::model()->find($config['default_post_id'], 'title');
 			$this->form->setData(array(
 				'fixed_title'=>$post['title'],
 			));
 		}
 		
+		//设置模版
+		empty($config['template']) && $config['template'] = $this->getDefaultTemplate();
+		
+		return $this->config = $config;
+	}
+	
+	public function index(){
 		//所有分类
-		$root_node = Category::service()->getByAlias('_system_post', 'id');
+		$root_node = CategoryService::service()->getByAlias('_system_post', 'id');
 		$this->view->cats = array(
 			array(
 				'id'=>$root_node['id'],
 				'title'=>'顶级',
-				'children'=>Category::service()->getTreeByParentId($root_node['id']),
+				'children'=>CategoryService::service()->getTreeByParentId($root_node['id']),
 			),
 		);
 		
@@ -45,21 +47,21 @@ class AdminController extends Widget{
 		$data = $this->form->getFilteredData();
 		
 		//若模版与默认模版一致，不保存
-		if(str_replace("\r", '', $data['template']) == str_replace("\r", '', file_get_contents(__DIR__.'/../views/index/template.php'))){
+		if($this->isDefaultTemplate($data['template'])){
 			$data['template'] = '';
 		}
 		
 		//若输入框被清空，则把ID也清空
 		if(\F::input()->post('fixed_title') == ''){
 			$this->form->setData(array(
-				'default_post_id'=>'',
+				'default_post_id'=>0,
 			), true);
-			$data['default_post_id'] = '';
+			$data['default_post_id'] = 0;
 		}
 		
-		$this->setConfig($data);
+		$this->saveConfig($data);
 		
-		Flash::set('编辑成功', 'success');
+		FlashService::set('编辑成功', 'success');
 	}
 	
 	public function rules(){

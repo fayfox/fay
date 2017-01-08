@@ -1,6 +1,6 @@
 <?php
-use fay\models\tables\Roles;
-use fay\services\user\Role;
+use fay\models\tables\RolesTable;
+use fay\services\user\UserRoleService;
 ?>
 <div class="box">
 	<div class="box-title">
@@ -12,7 +12,7 @@ use fay\services\user\Role;
 			<?php
 				echo F::form('widget')->inputHidden('default_page_id', array(
 					'id'=>'page-id',
-				));
+				), 0);
 				echo F::form('widget')->inputText('page_title', array(
 					'class'=>'form-control mw500',
 					'id'=>'page-title',
@@ -26,7 +26,7 @@ use fay\services\user\Role;
 			<a href="javascript:;" class="toggle-advance" style="text-decoration:underline;">高级设置</a>
 			<span class="fc-red">（若非开发人员，请不要修改以下配置）</span>
 		</div>
-		<div class="advance <?php if(!Role::service()->is(Roles::ITEM_SUPER_ADMIN))echo 'hide';?>">
+		<div class="advance <?php if(!UserRoleService::service()->is(RolesTable::ITEM_SUPER_ADMIN))echo 'hide';?>">
 			<div class="form-field">
 				<label class="title bold">ID字段</label>
 				<?php echo F::form('widget')->inputText('id_key', array(
@@ -49,10 +49,10 @@ use fay\services\user\Role;
 				<?php
 					echo F::form('widget')->inputRadio('inc_views', '1', array(
 						'label'=>'递增',
-					), true);
+					));
 					echo F::form('widget')->inputRadio('inc_views', '0', array(
 						'label'=>'不递增',
-					));
+					), true);
 				?>
 				<p class="fc-grey">仅搜索此分类及其子分类下的文章，当不同分类对应不同式样时，此选项很有用。</p>
 			</div>

@@ -2,10 +2,10 @@
 namespace fay\core;
 
 use fay\helpers\UrlHelper;
-use fay\services\Flash;
+use fay\services\FlashService;
 use fay\helpers\StringHelper;
 use fay\helpers\SqlHelper;
-use fay\helpers\Request;
+use fay\helpers\RequestHelper;
 
 class Response{
 	/**
@@ -155,11 +155,11 @@ class Response{
 		}else{
 			if(!empty($data['message'])){
 				//若设置了空 的message，则不发flash
-				Flash::set($data['message'], $status);
+				FlashService::set($data['message'], $status);
 			}else if($status == 'success'){
-				Flash::set('操作成功', $status);
+				FlashService::set('操作成功', $status);
 			}else{
-				Flash::set('操作失败', $status);
+				FlashService::set('操作失败', $status);
 			}
 
 			if($redirect === true){
@@ -213,7 +213,7 @@ class Response{
 	 * @param string $code 错误码。用有意义的英文描述组成，但不是给人看的，是给程序确定错误用的。例如：username:can-not-be-empty
 	 */
 	public static function json($data = '', $status = 1, $message = '', $code = ''){
-		if(!Request::isIE()){
+		if(!RequestHelper::isIE()){
 			//IE浏览器不发送此header，否则IE会弹出下载
 			header('Content-Type:application/json; charset=utf-8');
 		}

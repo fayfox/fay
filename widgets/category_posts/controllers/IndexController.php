@@ -2,10 +2,9 @@
 namespace fay\widgets\category_posts\controllers;
 
 use fay\widget\Widget;
-use fay\services\Category;
-use fay\services\Post;
-use fay\helpers\Date;
-use fay\services\post\Category as PostCategory;
+use fay\services\CategoryService;
+use fay\helpers\DateHelper;
+use fay\services\post\PostCategoryService;
 
 class IndexController extends Widget{
 	/**
@@ -53,17 +52,10 @@ class IndexController extends Widget{
 		'views'=>'views DESC, publish_time DESC',
 	);
 	
-	/**
-	 * 配置信息
-	 */
-	private $config;
-	
-	public function getData($config){
-		$this->initConfig($config);
-		
+	public function getData(){
 		$conditions = $this->getConditions();
 		
-		$posts = PostCategory::service()->getPosts(
+		$posts = PostCategoryService::service()->getPosts(
 			$this->getTopCategory(),
 			$this->config['number'],
 			$this->getFields(),
@@ -71,56 +63,23 @@ class IndexController extends Widget{
 			$this->getOrder(),
 			$conditions
 		);
+		
+		$posts = $this->formatPosts($posts);
 		
 		return $posts;
 	}
 	
-	public function index($config){
-		$this->initConfig($config);
-		
-		$conditions = $this->getConditions();
-		
-		$posts = PostCategory::service()->getPosts(
-			$this->getTopCategory(),
-			$this->config['number'],
-			$this->getFields(),
-			$this->config['subclassification'],
-			$this->getOrder(),
-			$conditions
-		);
+	public function index(){
+		$posts = $this->getData();
 		
 		//若无文章可显示，则不显示该widget
 		if(empty($posts) && !$this->config['show_empty']){
 			return;
 		}
 		
-		$posts = $this->formatPosts($posts);
-		
-		//template
-		if(empty($this->config['template'])){
-			//调用默认模版
-			$this->view->render('template', array(
-				'posts'=>$posts,
-				'config'=>$this->config,
-				'alias'=>$this->alias,
-				'_index'=>$this->_index,
-			));
-		}else{
-			if(preg_match('/^[\w_-]+(\/[\w_-]+)+$/', $this->config['template'])){
-				//调用app的view文件
-				\F::app()->view->renderPartial($this->config['template'], array(
-					'posts'=>$posts,
-					'config'=>$this->config,
-					'alias'=>$this->alias,
-					'_index'=>$this->_index,
-				));
-			}else{
-				//直接视为代码执行
-				$alias = $this->view->alias;
-				$_index = $this->_index;
-				eval('?>'.$this->config['template'].'<?php ');
-			}
-		}
+		$this->renderTemplate(array(
+			'posts'=>$posts,
+		));
 	}
 	
 	/**
@@ -128,16 +87,16 @@ class IndexController extends Widget{
 	 * @param array $config
 	 * @return array
 	 */
-	private function initConfig($config){
+	public function initConfig($config){
 		//root node
 		if(empty($config['cat_id'])){
-			$root_node = Category::service()->getByAlias('_system_post', 'id');
+			$root_node = CategoryService::service()->getByAlias('_system_post', 'id');
 			$config['cat_id'] = $root_node['id'];
 		}
 		
 		//title
 		if(empty($config['title'])){
-			$node = Category::service()->get($config['cat_id'], 'title');
+			$node = CategoryService::service()->get($config['cat_id'], 'title');
 			$config['title'] = $node['title'];
 		}
 		
@@ -151,7 +110,7 @@ class IndexController extends Widget{
 		isset($config['show_empty']) || $config['show_empty'] = 0;
 		
 		//date format
-		empty($config['date_format']) && $config['date_format'] = '';
+		empty($config['date_format']) && $config['date_format'] = 'pretty';
 		
 		//仅返回有缩略图的文章
 		if(empty($config['thumbnail'])){
@@ -160,7 +119,7 @@ class IndexController extends Widget{
 			$config['thumbnail'] = true;
 		}
 		
-		isset($config['subclassification']) && $config['subclassification'] = true;
+		isset($config['subclassification']) || $config['subclassification'] = true;
 		
 		empty($config['fields']) && $config['fields'] = array('meta');
 		
@@ -206,15 +165,29 @@ class IndexController extends Widget{
 					(empty($this->config['post_thumbnail_height']) ? 0 : $this->config['post_thumbnail_height']),
 			);
 		}
-		
+		//分类信息
 		if(in_array('category', $this->config['fields'])){
 			$fields['category'] = $this->fields['category'];
 		}
+		//计数器
 		if(in_array('meta', $this->config['fields'])){
 			$fields['meta'] = $this->fields['meta'];
 		}
+		//用户信息
 		if(in_array('user', $this->config['fields'])){
 			$fields['user'] = $this->fields['user'];
+		}
+		//标签
+		if(in_array('tags', $this->config['fields'])){
+			$fields['tags'] = $this->fields['tags'];
+		}
+		//附加属性
+		if(in_array('props', $this->config['fields'])){
+			$fields['props'] = array(
+				'fields'=>array(
+					'*'
+				)
+			);
 		}
 		if(in_array('files', $this->config['fields'])){
 			$file_fields = $this->fields['files'];
@@ -257,7 +230,7 @@ class IndexController extends Widget{
 		foreach($posts as &$p){
 			//附加格式化日期
 			if($this->config['date_format'] == 'pretty'){
-				$p['post']['format_publish_time'] = Date::niceShort($p['post']['publish_time']);
+				$p['post']['format_publish_time'] = DateHelper::niceShort($p['post']['publish_time']);
 			}else if($this->config['date_format']){
 				$p['post']['format_publish_time'] = \date($this->config['date_format'], $p['post']['publish_time']);
 			}else{
