@@ -1,5 +1,5 @@
 <?php
-namespace fay\services;
+namespace fay\services\user;
 
 use fay\core\Service;
 use fay\helpers\FieldHelper;
@@ -10,21 +10,25 @@ use fay\models\tables\RolesTable;
 use fay\models\tables\UserProfileTable;
 use fay\models\tables\UsersTable;
 use fay\models\tables\UsersRolesTable;
-use fay\services\user\UserCounterService;
-use fay\services\user\UserPasswordService;
 use fay\models\tables\UserCounterTable;
-use fay\services\user\UserProfileService;
-use fay\services\user\UserPropService;
-use fay\services\user\UserException;
 use fay\models\tables\UserLoginsTable;
-use fay\services\user\UserRoleService;
+use fay\services\AnalystService;
+use fay\services\FileService;
+use fay\services\OptionService;
 
 /**
  * 用户服务
  */
 class UserService extends Service{
-	
+	/**
+	 * 用户登录事件
+	 */
 	const EVENT_LOGIN = 'after_login';
+	
+	/**
+	 * 用户被创建后
+	 */
+	const EVENT_CREATED = 'after_user_created';
 	
 	/**
 	 * 公开字段（接口访问时，可以此判断是否可返回字段，服务自身不做判断）
@@ -103,6 +107,7 @@ class UserService extends Service{
 		\F::session()->set('user', array(
 			'id'=>$user['user']['id'],
 		));
+		\F::app()->current_user = $user['user']['id'];
 		
 		//更新用户最后登录信息
 		UserProfileTable::model()->update(array(
@@ -142,7 +147,7 @@ class UserService extends Service{
 	 * @param array $extra 其它信息
 	 *  - roles 角色ID，逗号分隔或一维数组
 	 *  - props 以属性ID为键，属性值为值构成的关联数组
-	 *  - trackid 字符串，用于追踪用户来源的自定义标识码
+	 *  - profile 用户扩展信息
 	 * @param int $is_admin
 	 * @return int|null
 	 * @throws UserException
@@ -161,14 +166,11 @@ class UserService extends Service{
 			'system:user_nickname_required',
 			'system:user_nickname_unique'
 		));
-		if(!isset($user['username']) || $user['username'] == ''){
-			throw new UserException('用户名不能为空', 'missing-parameter:username');
-		}
 		if($config['system:user_nickname_required'] && !isset($user['nickname']) || $user['nickname'] == ''){
 			throw new UserException('用户昵称不能为空', 'missing-parameter:nickname');
 		}
 		
-		if(UsersTable::model()->fetchRow(array(
+		if(!empty($user['username']) && UsersTable::model()->fetchRow(array(
 			'username = ?'=>$user['username'],
 		))){
 			throw new UserException('用户名已存在', 'invalid-parameter:username-is-exist');
@@ -177,7 +179,7 @@ class UserService extends Service{
 		if($config['system:user_nickname_unique'] && UsersTable::model()->fetchRow(array(
 			'nickname = ?'=>$user['nickname'],
 		))){
-			throw new UserException('用户昵称已存在', 'invalid-parameter:username-is-exist');
+			throw new UserException('用户昵称已存在', 'invalid-parameter:nickname-is-exist');
 		}
 		
 		//插用户表
@@ -220,6 +222,9 @@ class UserService extends Service{
 			UserPropService::service()->createPropertySet($user_id, $extra['props']);
 		}
 		
+		//触发事件
+		\F::event()->trigger(self::EVENT_CREATED, $user_id);
+		
 		return $user_id;
 	}
 	
@@ -230,7 +235,7 @@ class UserService extends Service{
 	 * @param array $extra 其它信息
 	 *  - roles 角色ID，逗号分隔或一维数组
 	 *  - props 以属性ID为键，属性值为值构成的关联数组
-	 *  - trackid 字符串，用于追踪用户来源的自定义标识码
+	 *  - profile 用户扩展信息
 	 */
 	public function update($user_id, $user, $extra = array()){
 		if(isset($user['password'])){
@@ -503,13 +508,6 @@ class UserService extends Service{
 		}
 		
 		return $return;
-	}
-	
-	public function getMemberCount($parent){
-		$member = UsersTable::model()->fetchRow(array(
-			'parent = ?'=>$parent,
-		), 'COUNT(*) AS count');
-		return $member['count'];
 	}
 	
 	/**

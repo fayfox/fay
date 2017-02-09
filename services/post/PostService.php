@@ -1,5 +1,5 @@
 <?php
-namespace fay\services;
+namespace fay\services\post;
 
 use fay\core\Service;
 use fay\core\Sql;
@@ -16,17 +16,12 @@ use fay\models\tables\PostPropTextTable;
 use fay\models\tables\PostLikesTable;
 use fay\models\tables\PostMetaTable;
 use fay\helpers\RequestHelper;
-use fay\services\post\PostExtraService;
-use fay\services\post\PostMetaService;
-use fay\services\post\PostPropService;
-use fay\services\post\PostTagService;
 use fay\models\tables\PostFavoritesTable;
 use fay\models\tables\PostExtraTable;
-use fay\services\post\PostCategoryService;
-use fay\services\post\PostFileService;
-use fay\services\post\PostUserCounterService;
-use fay\services\post\PostException;
-use fay\services\post\PostUserService;
+use fay\services\CategoryService;
+use fay\services\FileService;
+use fay\services\OptionService;
+use fay\services\user\UserService;
 
 /**
  * 文章服务
@@ -546,7 +541,7 @@ class PostService extends Service{
 	 *  - nav.*系列用于指定上一篇，下一篇返回的字段，可指定posts表返回字段，若有一项为'nav.*'，则返回除content字段外的所有字段
 	 *  - files.*系列可指定posts_files表返回字段，若有一项为'posts_files.*'，则返回所有字段
 	 *  - props.*系列可指定返回哪些文章分类属性，若有一项为'props.*'，则返回所有文章分类属性
-	 *  - user.*系列可指定作者信息，格式参照\fay\services\UserService::get()
+	 *  - user.*系列可指定作者信息，格式参照\fay\services\user\UserService::get()
 	 *  - categories.*系列可指定附加分类，可选categories表字段，若有一项为'categories.*'，则返回所有字段
 	 *  - category.*系列可指定主分类，可选categories表字段，若有一项为'categories.*'，则返回所有字段
 	 * @param int|string|array $cat 若指定分类（可以是id，alias或者包含left_value, right_value值的数组），
@@ -1088,7 +1083,7 @@ class PostService extends Service{
 	 *  - nav.*系列用于指定上一篇，下一篇返回的字段，可指定posts表返回字段，若有一项为'nav.*'，则返回除content字段外的所有字段
 	 *  - files.*系列可指定posts_files表返回字段，若有一项为'posts_files.*'，则返回所有字段
 	 *  - props.*系列可指定返回哪些文章分类属性，若有一项为'props.*'，则返回所有文章分类属性
-	 *  - user.*系列可指定作者信息，格式参照\fay\services\UserService::get()
+	 *  - user.*系列可指定作者信息，格式参照\fay\services\user\UserService::get()
 	 *  - categories.*系列可指定附加分类，可选categories表字段，若有一项为'categories.*'，则返回所有字段
 	 *  - category.*系列可指定主分类，可选categories表字段，若有一项为'categories.*'，则返回所有字段
 	 * @param bool $only_published 若为true，则只在已发布的文章里搜索。默认为false
