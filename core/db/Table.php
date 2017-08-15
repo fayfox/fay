@@ -113,7 +113,6 @@ class Table extends Model{
      * @param bool $fill 若为true，则会与$except字段配合进行字段过滤，排除不存在的字段和except中指定的字段
      * @param string $except 当$fill为true时，指定不更新某些字段
      * @return int|null
-     * @throws \fay\core\Exception
      */
     public function update($data, $where, $fill = false, $except = 'update'){
         if(StringHelper::isInt($where)){
@@ -144,7 +143,7 @@ class Table extends Model{
     /**
      * 递增指定列
      * @param mixed $where
-     * @param string $fields 列名
+     * @param string|array $fields 列名
      * @param int $value 增量（可以是负数）
      * @return int
      */
@@ -158,7 +157,7 @@ class Table extends Model{
     /**
      * 根据主键查找数据
      * @param mixed $primary
-     * @param string $fields
+     * @param string|array $fields
      * @return array|bool
      */
     public function find($primary, $fields = '*'){
@@ -180,7 +179,7 @@ class Table extends Model{
     /**
      * 获取一条记录
      * @param array|string $conditions
-     * @param string $fields 可用 !id 表示除了id外的所有字段
+     * @param string|array $fields 可用 !id 表示除了id外的所有字段
      * @param bool|string $order
      * @param null $offset
      * @param string $style 返回结果集类型，默认为索引数组
@@ -188,7 +187,8 @@ class Table extends Model{
      */
     public function fetchRow($conditions, $fields = '*', $order = false, $offset = null, $style = 'assoc'){
         $sql = new Sql($this->db);
-        $sql->from($this->_name, $this->formatFields($fields))
+        $sql->from($this->_name, '')
+            ->select($this->formatFields($fields))
             ->where($conditions)
             ->limit(1, $offset);
         if($order){
@@ -200,7 +200,7 @@ class Table extends Model{
     /**
      * 获取所有数据
      * @param array $conditions
-     * @param string $fields 可用 !id 表示除了id外的所有字段
+     * @param string|array $fields 可用 !id 表示除了id外的所有字段
      * @param bool|string $order
      * @param bool|int $count
      * @param bool|int $offset
@@ -233,6 +233,19 @@ class Table extends Model{
         $result = $this->fetchAll($conditions, $col, $order, $count, $offset);
         
         return ArrayHelper::column($result, $col);
+    }
+
+    /**
+     * 判断复合条件的记录是否存在
+     * @param array $conditions
+     * @return bool
+     */
+    public function has($conditions){
+        $sql = new Sql($this->db);
+        return !!$sql->from($this->_name, '')
+            ->select('1')
+            ->where($conditions)
+            ->fetchRow();
     }
     
     /**

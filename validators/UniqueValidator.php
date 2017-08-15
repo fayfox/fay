@@ -1,7 +1,6 @@
 <?php
 namespace fay\validators;
 
-use fay\core\ErrorException;
 use fay\core\Sql;
 use fay\core\Validator;
 
@@ -41,7 +40,7 @@ class UniqueValidator extends Validator{
         $field = $this->field ? $this->field : $this->_field;
         
         if(!$this->table){
-            throw new ErrorException('fay\validators\Unique验证器必须指定table参数');
+            throw new \ErrorException('fay\validators\Unique验证器必须指定table参数');
         }
         
         $sql = new Sql();
@@ -49,8 +48,8 @@ class UniqueValidator extends Validator{
             ->where(array(
                 "`{$field}` = ?"=>$value,
             ) + $this->conditions);
-        if($this->except && \F::app()->input->request($this->except)){
-            $sql->where(array("{$this->except} != ?"=>\F::app()->input->request($this->except)));
+        if($this->except && \F::input()->request($this->except)){
+            $sql->where(array("{$this->except} != ?"=>\F::input()->request($this->except)));
         }
         $result = $sql->fetchRow();
         if($result){

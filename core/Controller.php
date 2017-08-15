@@ -2,7 +2,7 @@
 namespace fay\core;
 
 use cms\services\user\UserService;
-use fay\helpers\RequestHelper;
+use fay\helpers\IPHelper;
 use fay\helpers\StringHelper;
 
 /**
@@ -11,53 +11,72 @@ use fay\helpers\StringHelper;
  */
 class Controller{
     /**
+     * 模板文件
+     * @var string
+     */
+    public $layout_template;
+
+    /**
+     * 当前时间时间戳
+     * @var int
+     */
+    public $current_time = 0;
+
+    /**
+     * 当前登录用户ID
+     */
+    public $current_user = 0;
+
+    /**
+     * 当前用户IP
+     * @var string
+     */
+    public $ip = '';
+
+    /**
+     * 当前用户IP（已经转化成int类型）
+     * @var int
+     */
+    public $ip_int = 0;
+
+    /**
+     * @var Response
+     */
+    public $response;
+    
+    /**
      * 检查过被阻止的路由
      */
     protected $_denied_routers = array();
     
+    /**
+     * @var \fay\core\Input
+     */
+    protected $input;
+    
+    /**
+     * @var \fay\core\Config
+     */
+    protected $config;
+
     /**
      * 随机token，用于防止重复请求（并不一定用到）
      */
     private $token;
     
     /**
-     * @var \fay\core\Input
-     */
-    public $input;
-    /**
-     * @var \fay\core\Config
-     */
-    public $config;
-    /**
-     * 模板文件
-     * @var string
-     */
-    public $layout_template;
-    /**
-     * 当前时间时间戳
-     * @var int
-     */
-    public $current_time = 0;
-    /**
-     * 当前登录用户ID
-     */
-    public $current_user = 0;
-    /**
      * @var Controller
      */
     private static $_instance;
-    /**
-     * 当前用户登陆IP
-     * @var string
-     */
-    public $ip = '';
     
     public function __construct(){
         $this->input = Input::getInstance();
         $this->config = Config::getInstance();
         $this->current_time = time();
-        //当前用户登陆IP
-        $this->ip = RequestHelper::getIP();
+        $this->response = new Response();
+        //当前用户IP
+        $this->ip = Request::getUserIP();
+        $this->ip_int = IPHelper::ip2int($this->ip);
         
         self::$_instance = $this;
     }
@@ -114,7 +133,7 @@ class Controller{
     /**
      * 检查token防重复提交，每次校验都会重新生成一个token
      * @return bool
-     * @throws Exception
+     * @throws \Exception
      */
     protected function checkToken(){
         $token = $this->input->request('_token');
@@ -123,7 +142,7 @@ class Controller{
         if($token && $token == $last_token){
             return true;
         }else{
-            throw new Exception('Token校验失败');
+            throw new \Exception('Token校验失败');
         }
     }
     
@@ -133,7 +152,7 @@ class Controller{
      */
     protected function checkMethod($method){
         $method = strtoupper($method);
-        if(Http::getMethod() != $method){
+        if(Request::getMethod() != $method){
             Response::notify('error', array(
                 'message'=>"请以{$method}方式发起请求",
                 'code'=>'http-method-error',

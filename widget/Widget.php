@@ -5,7 +5,7 @@ use cms\helpers\WidgetHelper;
 use cms\models\tables\WidgetsTable;
 use fay\core\Db;
 use fay\core\Input;
-use fay\helpers\RequestHelper;
+use fay\core\Request;
 
 abstract class Widget{
     /**
@@ -91,7 +91,7 @@ abstract class Widget{
         $this->current_time = \F::app()->current_time;
         
         //当前用户登陆IP
-        $this->ip = RequestHelper::getIP();
+        $this->ip = Request::getUserIP();
         
         $this->init();
     }
@@ -158,7 +158,6 @@ abstract class Widget{
     /**
      * 渲染模版
      * @param array $data
-     * @throws \fay\core\ErrorException
      */
     protected function renderTemplate($data = array()){
         $this->view->assign($data);
@@ -169,7 +168,7 @@ abstract class Widget{
         }else{
             if(preg_match('/^[\w_-]+(\/[\w_-]+)+$/', $this->config['template'])){
                 //指定的是项目内的路径
-                \F::app()->view->renderPartial($this->config['template'], $this->view->getViewData());
+                echo \F::app()->view->renderPartial($this->config['template'], $this->view->getViewData());
             }else{
                 //直接eval源码
                 \F::app()->view->evalCode($this->config['template'], array_merge(array(

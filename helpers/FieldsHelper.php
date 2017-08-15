@@ -1,8 +1,6 @@
 <?php
 namespace fay\helpers;
 
-use fay\core\ErrorException;
-
 /**
  * Field项
  */
@@ -83,10 +81,10 @@ class FieldsHelper{
 
         if($current_section_fields){
             if(!in_array('*', $allow_fields) && in_array('*', $this->fields)){
-                //当前字段中有型号，允许的字段中没有星号，则将当前字段替换为允许的字段
+                //当前字段中有星号，允许的字段中没有星号，则将当前字段替换为允许的字段
                 $this->fields = $current_section_fields;
             }else if(in_array('*', $allow_fields)){
-                //允许的字段中有型号，则不做过滤
+                //允许的字段中有星号，则不做过滤
             }else{
                 //两边都没星号，取交集
                 $this->fields = array_intersect($this->fields, $current_section_fields);
@@ -117,7 +115,6 @@ class FieldsHelper{
     /**
      * 覆盖字段集合
      * @param array|string $fields
-     * @throws ErrorException
      * @return $this
      */
     public function setFields($fields){
@@ -129,7 +126,7 @@ class FieldsHelper{
             $this->fields = array();
             $this->addFields($fields);
         }else{
-            throw new ErrorException('无法识别的$fields类型[' . serialize($fields) . ']', 'unknown-field-type');
+            throw new \InvalidArgumentException('无法识别的$fields类型[' . serialize($fields) . ']');
         }
         
         return $this;
@@ -152,7 +149,6 @@ class FieldsHelper{
     /**
      * 增加一个或多个字段
      * @param string $fields
-     * @throws ErrorException
      */
     public function addFields($fields){
         if(is_array($fields)){
@@ -163,7 +159,7 @@ class FieldsHelper{
         if(is_string($fields)){
             $this->_parseString($fields);
         }else{
-            throw new ErrorException('无法识别的$fields类型', json_encode($fields));
+            throw new \InvalidArgumentException('无法识别的$fields类型', json_encode($fields));
         }
     }
 

@@ -1,6 +1,7 @@
 <?php
 namespace fay\core;
 
+use fay\exceptions\NotFoundHttpException;
 use fay\helpers\RuntimeHelper;
 
 class Bootstrap{
@@ -27,7 +28,7 @@ class Bootstrap{
         
         if(!$uri->router){
             //路由解析失败
-            throw new HttpException('Routing format illegal');
+            throw new NotFoundHttpException('非法的路由');
         }
         
         //根据router来读取缓存
@@ -50,20 +51,76 @@ class Bootstrap{
         
         $file = $this->getControllerAndAction($uri);
         RuntimeHelper::append(__FILE__, __LINE__, '获取控制器名称');
-        
+
+        /**
+         * @var $controller Controller
+         */
         $controller = new $file['controller'];
         RuntimeHelper::append(__FILE__, __LINE__, '控制器被实例化');
         //触发事件
         \F::event()->trigger('after_controller_constructor');
-        $controller->{$file['action']}();
+        $content = $controller->{$file['action']}();
         RuntimeHelper::append(__FILE__, __LINE__, '控制器方式执行完毕');
+
+        $this->response($controller->response, $content);
     }
-    
+
+    /**
+     * 输出返回
+     * @param Response $response
+     * @param mixed $content
+     */
+    private function response($response, $content){
+        if($content){
+            //若未指定返回格式，则根据$content类型猜测一个格式
+            if(!$response->getFormat()){
+                if(is_string($content)){
+                    //若是字符串，默认为HTML
+                    $response->setFormat(Response::FORMAT_HTML);
+                }else{
+                    if(\F::input()->get('callback')){
+                        //若非字符串，有callback参数，则默认为jsonp
+                        $response->setFormat(Response::FORMAT_JSONP);
+                    }else{
+                        //默认为json
+                        $response->setFormat(Response::FORMAT_JSON);
+                    }
+                }
+            }
+            
+            //设置响应内容
+            if(in_array($response->getFormat(), array(
+                Response::FORMAT_JSON, Response::FORMAT_JSONP
+            ))){
+                if(is_object($content) && $content instanceof JsonResponse){
+                    $response->setStatusCode($content->getHttpCode());
+                    
+                    if($content->getCallback()){
+                        $response->setFormat(Response::FORMAT_JSONP)
+                            ->setData(array(
+                                'callback'=>$content->getCallback(),
+                                'data'=>$content->toArray(),
+                            ));
+                    }else{
+                        $response->setData($content->toArray());
+                    }
+                }else{
+                    $response->setData($content);
+                }
+            }else{
+                $response->setContent($content);
+            }
+        }
+        
+        //发送响应
+        $response->send();
+    }
+
     /**
      * 查找对应的controller文件和action方法
      * @param Uri $uri
      * @return array
-     * @throws HttpException
+     * @throws NotFoundHttpException
      */
     private function getControllerAndAction($uri){
         //包名指定的是app
@@ -111,7 +168,7 @@ class Bootstrap{
             }
             
             if($found_controllers){
-                throw new HttpException("Found the following controllers, but no Action {$uri->action} found among them.", 404, implode("\n", $found_controllers));
+                throw new NotFoundHttpException("Found the following controllers, but no Action {$uri->action} found among them.\n" . implode("\n", $found_controllers));
             }
         }
         
@@ -131,11 +188,11 @@ class Bootstrap{
                     'action'=>$uri->action.'Action',
                 );
             }else{
-                throw new HttpException("Action \"{$uri->action}\" Not Found IN Controller \"{$class_name}\"");
+                throw new NotFoundHttpException("Action \"{$uri->action}\" Not Found IN Controller \"{$class_name}\"");
             }
         }
         
         //访问地址不存在
-        throw new HttpException("Controller \"{$uri->controller}\" Not Found");
+        throw new NotFoundHttpException("Controller \"{$uri->controller}\" Not Found");
     }
 }

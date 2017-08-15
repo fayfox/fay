@@ -1,44 +1,73 @@
 <?php
 namespace fay\models;
 
-use fay\core\db\Expr;
 use fay\core\db\Table;
 use fay\helpers\ArrayHelper;
 use fay\helpers\FieldsHelper;
 
 /**
  * 基于左右值的树操作
- * 该模型针对一张表对应一棵树的数据结构，适用于分类等需求
+ * 该模型针对一张表对应多棵树的数据结构，适用于多站点分类管理等需求
  * 该模型基于ID或直接传入数组操作，不根据alias进行操作，也不做数据正确性验证
  * **关键字段**：
  *  - id 节点ID
+ *  - $this->group_field 归档字段
  *  - left_value 左值
  *  - right_value 右值
  *  - parent 父节点ID
  *  - sort 排序值（在平级内部起作用，不同层级之间的排序不受sort影响。）
  */
-abstract class TreeModel{
+abstract class GroupTreeModel{
+    /**
+     * 归档字段
+     * @var string
+     */
+    protected $group_field;
+
     /**
      * 获取表model
      * @return Table
      */
     abstract protected function getModel();
     
+    public function __construct(){
+        if(!$this->group_field){
+            throw new \ErrorException(__CLASS__ . '::$group_field属性未指定');
+        }
+    }
+
+    /**
+     * 索引全表记录
+     */
+    public function buildAllIndex(){
+        $groups = array_unique($this->getModel()->fetchCol($this->group_field));
+        foreach($groups as $group){
+            $this->buildIndex($group);
+        }
+    }
+
     /**
      * 索引记录
+     * @param int $group_id 归档ID
      * @param int $parent
      * @param int $start_num
      * @param array $nodes
      * @return int
      */
-    public function buildIndex($parent = 0, $start_num = 1, $nodes = array()){
-        $nodes || $nodes = $this->getModel()->fetchAll('parent = ' . $parent, 'id', 'sort, id');
+    public function buildIndex($group_id, $parent = 0, $start_num = 1, $nodes = array()){
+        $nodes || $nodes = $this->getModel()->fetchAll(array(
+            $this->group_field=>$group_id,
+            'parent = ?'=>$parent,
+        ), 'id', 'sort, id');
         foreach($nodes as $node){
-            $children = $this->getModel()->fetchAll('parent = ' . $node['id'], 'id', 'sort, id');
+            $children = $this->getModel()->fetchAll(array(
+                $this->group_field=>$group_id,
+                'parent = ?'=>$node['id'],
+            ), 'id', 'sort, id');
             if($children){
                 //有孩子，先记录左节点，右节点待定
                 $left = ++$start_num;
-                $start_num = $this->buildIndex($node['id'], $start_num, $children);
+                $start_num = $this->buildIndex($group_id, $node['id'], $start_num, $children);
                 $this->getModel()->update(array(
                     'left_value'=>$left,
                     'right_value'=>++$start_num,
@@ -53,27 +82,36 @@ abstract class TreeModel{
         }
         return $start_num;
     }
-    
+
     /**
      * 创建一个节点
+     * @param int $group_id 归档ID
      * @param int $parent 父节点
      * @param int $sort 排序值
      * @param array $data 其它参数
      * @return int 节点ID
      */
-    public function create($parent, $sort, $data){
+    public function create($group_id, $parent, $sort, $data){
         if($parent == 0){
             //插入根节点
             $right_node = $this->getModel()->fetchRow(array(
+                $this->group_field=>$group_id,
                 'parent = 0',
                 'sort > ' . $sort,
             ), 'left_value,right_value', 'sort, id');
             
             if($right_node){
                 //存在右节点
-                $this->getModel()->incr('left_value >= ' . $right_node['left_value'], 'left_value', 2);
-                $this->getModel()->incr('right_value >= ' . $right_node['left_value'], 'right_value', 2);
+                $this->getModel()->incr(array(
+                    $this->group_field=>$group_id,
+                    'left_value >= ' . $right_node['left_value'],
+                ), 'left_value', 2);
+                $this->getModel()->incr(array(
+                    $this->group_field=>$group_id,
+                    'right_value >= ' . $right_node['left_value'],
+                ), 'right_value', 2);
                 $node_id = $this->getModel()->insert(array_merge($data, array(
+                    $this->group_field=>$group_id,
                     'sort'=>$sort,
                     'parent'=>$parent,
                     'left_value'=>$right_node['left_value'],
@@ -81,25 +119,40 @@ abstract class TreeModel{
                 )));
             }else{
                 //不存在右节点，即在孩子的最后面插入
-                $max_right_node = $this->getModel()->fetchRow(array(), 'MAX(right_value) AS max');
+                $max_right_node = $this->getModel()->fetchRow(array(
+                    $this->group_field=>$group_id,
+                ), 'MAX(right_value) AS max');
+                //编号从2开始，所以第一个插入的节点，左值应该是2，而不是1
+                $max_right_node_value = empty($max_right_node['max']) ? 1 : $max_right_node['max']; 
                 $node_id = $this->getModel()->insert(array_merge($data, array(
+                    $this->group_field=>$group_id,
                     'sort'=>$sort,
                     'parent'=>$parent,
-                    'left_value'=>$max_right_node['max'] + 1,
-                    'right_value'=>$max_right_node['max'] + 2,
+                    'left_value'=>$max_right_node_value + 1,
+                    'right_value'=>$max_right_node_value + 2,
                 )));
             }
         }else{
-            $parent_node = $this->getModel()->find($parent, 'left_value,right_value');
+            $parent_node = $this->getModel()->find($parent, 'left_value,right_value,'.$this->group_field);
             if(!$parent_node){
                 throw new \UnexpectedValueException('父节点不存在， 参数异常');
+            }
+            if($parent_node[$this->group_field] != $group_id){
+                throw new \UnexpectedValueException('父节点归档ID与指定归档ID不一致');
             }
             
             if($parent_node['right_value'] - $parent_node['left_value'] == 1){
                 //父节点本身是叶子节点，直接挂载
-                $this->getModel()->incr('left_value > ' . $parent_node['left_value'], 'left_value', 2);
-                $this->getModel()->incr('right_value > ' . $parent_node['left_value'], 'right_value', 2);
+                $this->getModel()->incr(array(
+                    $this->group_field=>$group_id,
+                    'left_value > ' . $parent_node['left_value'],
+                ), 'left_value', 2);
+                $this->getModel()->incr(array(
+                    $this->group_field=>$group_id,
+                    'right_value > ' . $parent_node['left_value'],
+                ), 'right_value', 2);
                 $node_id = $this->getModel()->insert(array_merge($data, array(
+                    $this->group_field=>$group_id,
                     'sort'=>$sort,
                     'parent'=>$parent,
                     'left_value'=>$parent_node['left_value'] + 1,
@@ -109,15 +162,23 @@ abstract class TreeModel{
                 //父节点非叶子节点
                 //定位新插入节点的排序位置
                 $left_node = $this->getModel()->fetchRow(array(
+                    $this->group_field=>$group_id,
                     'parent = ' . $parent,
                     'sort <= ' . $sort,
                 ), 'left_value,right_value', 'sort DESC, id DESC');
                 
                 if($left_node){
                     //存在左节点
-                    $this->getModel()->incr('left_value > ' . $left_node['right_value'], 'left_value', 2);
-                    $this->getModel()->incr('right_value > ' . $left_node['right_value'], 'right_value', 2);
+                    $this->getModel()->incr(array(
+                        $this->group_field=>$group_id,
+                        'left_value > ' . $left_node['right_value'],
+                    ), 'left_value', 2);
+                    $this->getModel()->incr(array(
+                        $this->group_field=>$group_id,
+                        'right_value > ' . $left_node['right_value'],
+                    ), 'right_value', 2);
                     $node_id = $this->getModel()->insert(array_merge($data, array(
+                        $this->group_field=>$group_id,
                         'sort'=>$sort,
                         'parent'=>$parent,
                         'left_value'=>$left_node['right_value'] + 1,
@@ -125,9 +186,16 @@ abstract class TreeModel{
                     )));
                 }else{
                     //不存在左节点，即在孩子的最前面插入
-                    $this->getModel()->incr('left_value > ' . $parent_node['left_value'], 'left_value', 2);
-                    $this->getModel()->incr('right_value > ' . $parent_node['left_value'], 'right_value', 2);
+                    $this->getModel()->incr(array(
+                        $this->group_field=>$group_id,
+                        'left_value > ' . $parent_node['left_value'],
+                    ), 'left_value', 2);
+                    $this->getModel()->incr(array(
+                        $this->group_field=>$group_id,
+                        'right_value > ' . $parent_node['left_value'],
+                    ), 'right_value', 2);
                     $node_id = $this->getModel()->insert(array_merge($data, array(
+                        $this->group_field=>$group_id,
                         'sort'=>$sort,
                         'parent'=>$parent,
                         'left_value'=>$parent_node['left_value'] + 1,
@@ -150,9 +218,12 @@ abstract class TreeModel{
         $node = $this->getModel()->find($id);
         if($parent !== null){
             if($parent != 0){
-                $parent_node = $this->getModel()->find($parent, 'id');
+                $parent_node = $this->getModel()->find($parent, $this->group_field);
                 if(!$parent_node){
                     throw new \UnexpectedValueException("指定父节点[{$parent}]不存在");
+                }
+                if($parent_node[$this->group_field] != $node[$this->group_field]){
+                    throw new \UnexpectedValueException('节点不能在不同归档之间移动');
                 }
             }
             $data['parent'] = $parent;
@@ -166,6 +237,7 @@ abstract class TreeModel{
             //修改了parent
             //获取该节点为根节点的树枝
             $branch_ids = $this->getModel()->fetchCol('id', array(
+                $this->group_field=>$node[$this->group_field],
                 'left_value >= ' . $node['left_value'],
                 'right_value <= ' . $node['right_value'],
             ));
@@ -174,20 +246,25 @@ abstract class TreeModel{
              */
             $diff = $node['right_value'] - $node['left_value'] + 1;//差值
             //所有后续节点减去差值
-            $this->getModel()->update(array(
-                'left_value'=>new Expr('left_value - ' . $diff),
-                'right_value'=>new Expr('right_value - ' . $diff),
-            ), array(
-                'right_value > ' . $node['right_value'],
-                'left_value > ' . $node['right_value'],
-            ));
+            $this->getModel()->incr(
+                array(
+                    $this->group_field=>$node[$this->group_field],
+                    'right_value > ' . $node['right_value'],
+                    'left_value > ' . $node['right_value'],
+                ),
+                array('left_value', 'right_value'),
+                - $diff
+            );
             //所有父节点的右节点减去差值
-            $this->getModel()->update(array(
-                'right_value'=>new Expr('right_value - ' . $diff),
-            ), array(
-                'right_value > ' . $node['right_value'],
-                'left_value < ' . $node['left_value'],
-            ));
+            $this->getModel()->incr(
+                array(
+                    $this->group_field=>$node[$this->group_field],
+                    'right_value > ' . $node['right_value'],
+                    'left_value < ' . $node['left_value'],
+                ),
+                'right_value',
+                - $diff
+            );
             /*
              * 将树枝挂载过去
              */
@@ -196,7 +273,9 @@ abstract class TreeModel{
                 $parent_node = $this->getModel()->find($parent, 'left_value,right_value');
             }else{
                 //移到根节点
-                $max_right = $this->getModel()->fetchRow(array(), 'MAX(right_value) AS max');
+                $max_right = $this->getModel()->fetchRow(array(
+                    $this->group_field=>$node[$this->group_field],
+                ), 'MAX(right_value) AS max');
                 $parent_node = array(
                     'left_value'=>0,
                     'right_value'=>$max_right['max'] + 1,
@@ -205,27 +284,34 @@ abstract class TreeModel{
             if($parent_node['right_value'] - $parent_node['left_value'] == 1){
                 //叶子节点，直接挂
                 //所有后续节点加上差值
-                $this->getModel()->update(array(
-                    'left_value'=>new Expr('left_value + ' . $diff),
-                    'right_value'=>new Expr('right_value + ' . $diff),
-                ), array(
-                    'right_value > ' . $parent_node['right_value'],
-                    'left_value > ' . $parent_node['right_value'],
-                    'id NOT IN ('.implode(',', $branch_ids).')',
-                ));
+                $this->getModel()->incr(
+                    array(
+                        $this->group_field=>$node[$this->group_field],
+                        'right_value > ' . $parent_node['right_value'],
+                        'left_value > ' . $parent_node['right_value'],
+                        'id NOT IN ('.implode(',', $branch_ids).')',
+                    ),
+                    array('left_value', 'right_value'),
+                    $diff
+                );
                 //所有父节点的右节点加上差值
-                $this->getModel()->update(array(
-                    'right_value'=>new Expr('right_value + ' . $diff),
-                ), array(
-                    'right_value >= ' . $parent_node['right_value'],
-                    'left_value <= ' . $parent_node['left_value'],
-                    'id NOT IN ('.implode(',', $branch_ids).')',
-                ));
+                $this->getModel()->incr(
+                    array(
+                        $this->group_field=>$node[$this->group_field],
+                        'right_value >= ' . $parent_node['right_value'],
+                        'left_value <= ' . $parent_node['left_value'],
+                        'id NOT IN ('.implode(',', $branch_ids).')',
+                    ),
+                    'right_value',
+                    $diff
+                );
+                
                 $diff2 = $parent_node['right_value'] - $node['left_value'];
-                $this->getModel()->update(array(
-                    'left_value'=>new Expr('left_value + ' . $diff2),
-                    'right_value'=>new Expr('right_value + ' . $diff2),
-                ), 'id IN ('.implode(',', $branch_ids).')');
+                $this->getModel()->incr(
+                    'id IN ('.implode(',', $branch_ids).')',
+                    array('left_value', 'right_value'),
+                    $diff2
+                );
             }else{
                 //若未指定sort，获取源节点的sort值
                 if($sort === null){
@@ -233,6 +319,7 @@ abstract class TreeModel{
                 }
                 //寻找挂载位置的右节点
                 $right_node = $this->getModel()->fetchRow(array(
+                    $this->group_field=>$node[$this->group_field],
                     'parent = ' . $parent,
                     'or'=>array(
                         'sort > ' . $sort,
@@ -246,59 +333,73 @@ abstract class TreeModel{
                 if($right_node){
                     //存在右节点
                     //所有后续节点及其子节点加上差值
-                    $this->getModel()->update(array(
-                        'left_value'=>new Expr('left_value + ' . $diff),
-                        'right_value'=>new Expr('right_value + ' . $diff),
-                    ), array(
-                        'or'=>array(
-                            'and'=>array(
-                                'right_value >= ' . $right_node['right_value'],
-                                'left_value >= ' . $right_node['left_value'],
+                    $this->getModel()->incr(
+                        array(
+                            $this->group_field=>$node[$this->group_field],
+                            'or'=>array(
+                                'and'=>array(
+                                    'right_value >= ' . $right_node['right_value'],
+                                    'left_value >= ' . $right_node['left_value'],
+                                ),
+                                'AND'=>array(
+                                    'left_value > ' . $right_node['left_value'],
+                                    'right_value < ' . $right_node['right_value'],
+                                )
                             ),
-                            'AND'=>array(
-                                'left_value > ' . $right_node['left_value'],
-                                'right_value < ' . $right_node['right_value'],
-                            )
+                            'id NOT IN ('.implode(',', $branch_ids).')',
                         ),
-                        'id NOT IN ('.implode(',', $branch_ids).')',
-                    ));
+                        array('left_value', 'right_value'),
+                        $diff
+                    );
                     //所有父节点的右节点加上差值
-                    $this->getModel()->update(array(
-                        'right_value'=>new Expr('right_value + ' . $diff),
-                    ), array(
-                        'right_value > ' . $right_node['right_value'],
-                        'left_value < ' . $right_node['left_value'],
-                        'id NOT IN ('.implode(',', $branch_ids).')',
-                    ));
+                    $this->getModel()->incr(
+                        array(
+                            $this->group_field=>$node[$this->group_field],
+                            'right_value > ' . $right_node['right_value'],
+                            'left_value < ' . $right_node['left_value'],
+                            'id NOT IN ('.implode(',', $branch_ids).')',
+                        ),
+                        'right_value',
+                        $diff
+                    );
+                    
                     $diff2 = $right_node['left_value'] - $node['left_value'];
-                    $this->getModel()->update(array(
-                        'left_value'=>new Expr('left_value + ' . $diff2),
-                        'right_value'=>new Expr('right_value + ' . $diff2),
-                    ), 'id IN ('.implode(',', $branch_ids).')');
+                    $this->getModel()->incr(
+                        'id IN ('.implode(',', $branch_ids).')',
+                        array('left_value', 'right_value'),
+                        $diff2
+                    );
                 }else{
                     //不存在右节点，插到最后
                     //所有后续节点加上差值
-                    $this->getModel()->update(array(
-                        'left_value'=>new Expr('left_value + ' . $diff),
-                        'right_value'=>new Expr('right_value + ' . $diff),
-                    ), array(
-                        'right_value > ' . $parent_node['right_value'],
-                        'left_value > ' . $parent_node['left_value'],
-                        'id NOT IN ('.implode(',', $branch_ids).')',
-                    ));
+                    $this->getModel()->incr(
+                        array(
+                            $this->group_field=>$node[$this->group_field],
+                            'right_value > ' . $parent_node['right_value'],
+                            'left_value > ' . $parent_node['left_value'],
+                            'id NOT IN ('.implode(',', $branch_ids).')',
+                        ),
+                        array('left_value', 'right_value'),
+                        $diff
+                    );
                     //所有父节点的右节点加上差值
-                    $this->getModel()->update(array(
-                        'right_value'=>new Expr('right_value + ' . $diff),
-                    ), array(
-                        'right_value >= ' . $parent_node['right_value'],
-                        'left_value <= ' . $parent_node['left_value'],
-                        'id NOT IN ('.implode(',', $branch_ids).')',
-                    ));
+                    $this->getModel()->incr(
+                        array(
+                            $this->group_field=>$node[$this->group_field],
+                            'right_value >= ' . $parent_node['right_value'],
+                            'left_value <= ' . $parent_node['left_value'],
+                            'id NOT IN ('.implode(',', $branch_ids).')',
+                        ),
+                        'right_value',
+                        $diff
+                    );
+                    
                     $diff2 = $parent_node['right_value'] - $node['left_value'];
-                    $this->getModel()->update(array(
-                        'left_value'=>new Expr('left_value + ' . $diff2),
-                        'right_value'=>new Expr('right_value + ' . $diff2),
-                    ), 'id IN ('.implode(',', $branch_ids).')');
+                    $this->getModel()->incr(
+                        'id IN ('.implode(',', $branch_ids).')',
+                        array('left_value', 'right_value'),
+                        $diff2
+                    );
                 }
             }
         }else if($sort !== null && $sort != $node['sort']){
@@ -306,7 +407,7 @@ abstract class TreeModel{
             $this->sort($node, $sort);
         }
     }
-
+    
     /**
      * 删除一个节点，其子节点将被挂载到父节点
      * @param int $id 节点ID
@@ -314,44 +415,51 @@ abstract class TreeModel{
      */
     public function remove($id){
         //获取被删除节点
-        $node = $this->getModel()->find($id, 'left_value,right_value,parent');
+        $node = $this->getModel()->find($id, 'left_value,right_value,parent,' . $this->group_field);
         if(!$node){
             //节点不存在，直接返回false
             return false;
         }
         //所有子节点左右值-1
-        $this->getModel()->update(array(
-            'left_value'=>new Expr('left_value - 1'),
-            'right_value'=>new Expr('right_value - 1'),
-        ), array(
-            'left_value > ' . $node['left_value'],
-            'right_value < ' . $node['right_value'],
-        ));
+        $this->getModel()->incr(
+            array(
+                $this->group_field=>$node[$this->group_field],
+                'left_value > ' . $node['left_value'],
+                'right_value < ' . $node['right_value'],
+            ),
+            array('left_value', 'right_value'),
+            -1
+        );
         //所有后续节点左右值-2
-        $this->getModel()->update(array(
-            'left_value'=>new Expr('left_value - 2'),
-            'right_value'=>new Expr('right_value - 2'),
-        ), array(
-            'left_value > ' . $node['right_value'],
-            'right_value > ' . $node['right_value'],
-        ));
+        $this->getModel()->incr(
+            array(
+                $this->group_field=>$node[$this->group_field],
+                'left_value > ' . $node['right_value'],
+                'right_value > ' . $node['right_value'],
+            ),
+            array('left_value', 'right_value'),
+            -2
+        );
         //所有父节点
-        $this->getModel()->update(array(
-            'right_value'=>new Expr('right_value - 2'),
-        ), array(
-            'left_value < ' . $node['left_value'],
-            'right_value > ' . $node['right_value'],
-        ));
+        $this->getModel()->incr(
+            array(
+                $this->group_field=>$node[$this->group_field],
+                'left_value < ' . $node['left_value'],
+                'right_value > ' . $node['right_value'],
+            ),
+            'right_value',
+            -2
+        );
         //删除当前节点
         $this->getModel()->delete($id);
         //将所有父节点为该节点的parent字段指向其parent
         $this->getModel()->update(array(
             'parent'=>$node['parent'],
         ), 'parent = ' . $id);
-
+        
         return true;
     }
-
+    
     /**
      * 删除一个节点，及其所有子节点
      * @param int $id 节点ID
@@ -359,35 +467,40 @@ abstract class TreeModel{
      */
     public function removeAll($id){
         //获取被删除节点
-        $node = $this->getModel()->find($id, 'left_value,right_value,parent');
+        $node = $this->getModel()->find($id, 'left_value,right_value,parent,' . $this->group_field);
         if(!$node){
-            //节点不存在，直接返回false
             return false;
         }
-
+        
         //删除所有树枝节点
         $this->getModel()->delete(array(
+            $this->group_field=>$node[$this->group_field],
             'left_value >= ' . $node['left_value'],
             'right_value <= ' . $node['right_value'],
         ));
-
+        
         //差值
         $diff = $node['right_value'] - $node['left_value'] + 1;
         //所有后续节点减去差值
-        $this->getModel()->update(array(
-            'left_value'=>new Expr('left_value - ' . $diff),
-            'right_value'=>new Expr('right_value - ' . $diff),
-        ), array(
-            'left_value > ' . $node['left_value'],
-            'right_value > ' . $node['right_value'],
-        ));
+        $this->getModel()->incr(
+            array(
+                $this->group_field=>$node[$this->group_field],
+                'left_value > ' . $node['left_value'],
+                'right_value > ' . $node['right_value'],
+            ),
+            array('left_value', 'right_value'),
+            - $diff
+        );
         //所有父节点的右节点减去差值
-        $this->getModel()->update(array(
-            'right_value'=>new Expr('right_value - ' . $diff),
-        ), array(
-            'left_value < ' . $node['left_value'],
-            'right_value > ' . $node['right_value'],
-        ));
+        $this->getModel()->incr(
+            array(
+                $this->group_field=>$node[$this->group_field],
+                'left_value < ' . $node['left_value'],
+                'right_value > ' . $node['right_value'],
+            ),
+            'right_value',
+            - $diff
+        );
         return true;
     }
 
@@ -400,7 +513,7 @@ abstract class TreeModel{
         $sort < 0 && $sort = 0;
         //获取被移动的节点
         if(is_int($node) || is_string($node)){
-            $node = $this->getOrFail($node, 'id,left_value,right_value,parent,sort');
+            $node = $this->getOrFail($node, array('id', 'left_value', 'right_value', 'parent', 'sort', $this->group_field));
         }else if(!isset($node['id']) ||
             !isset($node['left_value']) || !isset($node['right_value']) ||
             !isset($node['parent']) || !isset($node['sort'])
@@ -415,9 +528,10 @@ abstract class TreeModel{
         $this->getModel()->update(array(
             'sort'=>$sort,
         ), $node['id']);
-
+        
         //被移动节点原来的左节点（排序值小于该节点 或 ID小于该节点ID）
         $ori_left_node = $this->getModel()->fetchRow(array(
+            $this->group_field=>$node[$this->group_field],
             'parent = ' . $node['parent'],
             'or'=>array(
                 'sort < ' . $node['sort'],
@@ -430,6 +544,7 @@ abstract class TreeModel{
         $ori_left_node_sort = isset($ori_left_node['sort']) ? $ori_left_node['sort'] : -1;
         //被移动节点原来的右节点（排序值大于该节点 或 ID大于该节点ID）
         $ori_right_node = $this->getModel()->fetchRow(array(
+            $this->group_field=>$node[$this->group_field],
             'parent = ' . $node['parent'],
             'or'=>array(
                 'sort > ' . $node['sort'],
@@ -443,6 +558,7 @@ abstract class TreeModel{
         if($sort < $ori_left_node_sort || ($sort == $ori_left_node_sort && $node['id'] < $ori_left_node['id'])){//节点左移
             //新位置的右节点
             $right_node = $this->getModel()->fetchRow(array(
+                $this->group_field=>$node[$this->group_field],
                 'parent = ' . $node['parent'],
                 'or'=>array(
                     'sort > ' . $sort,
@@ -455,28 +571,33 @@ abstract class TreeModel{
             ), 'id,left_value', 'sort, id');
             //获取被移动的树枝的所有节点
             $branch_ids = $this->getModel()->fetchCol('id', array(
+                $this->group_field=>$node[$this->group_field],
                 'left_value >= ' . $node['left_value'],
                 'right_value <= ' . $node['right_value'],
             ));
             //修改移动区间内树枝的左右值
             $diff = $node['right_value'] - $node['left_value'] + 1;
-            $this->getModel()->update(array(
-                'left_value'=>new Expr('left_value + ' . $diff),
-                'right_value'=>new Expr('right_value + ' . $diff),
-            ), array(
-                'left_value >= ' . $right_node['left_value'],
-                'right_value < ' . $node['left_value'],
-                'id NOT IN('.implode(',', $branch_ids).')',
-            ));
+            $this->getModel()->incr(
+                array(
+                    $this->group_field=>$node[$this->group_field],
+                    'left_value >= ' . $right_node['left_value'],
+                    'right_value < ' . $node['left_value'],
+                    'id NOT IN('.implode(',', $branch_ids).')',
+                ),
+                array('left_value', 'right_value'),
+                $diff
+            );
             //修改被移动树枝的左右值
             $diff = $node['left_value'] - $right_node['left_value'];
-            $this->getModel()->update(array(
-                'left_value'=>new Expr('left_value - ' . $diff),
-                'right_value'=>new Expr('right_value - ' . $diff),
-            ), 'id IN ('.implode(',', $branch_ids).')');
+            $this->getModel()->incr(
+                'id IN ('.implode(',', $branch_ids).')',
+                array('left_value', 'right_value'),
+                - $diff
+            );
         }else if($sort > $ori_right_node_sort || ($sort == $ori_right_node_sort && $node['id'] > $ori_right_node['id'])){//节点右移
             //新位置的左节点
             $left_node = $this->getModel()->fetchRow(array(
+                $this->group_field=>$node[$this->group_field],
                 'parent = ' . $node['parent'],
                 'or'=>array(
                     'sort < ' . $sort,
@@ -489,52 +610,60 @@ abstract class TreeModel{
             ), 'right_value', 'sort DESC, id DESC');
             //获取被移动的树枝的所有节点
             $branch_ids = $this->getModel()->fetchCol('id', array(
+                $this->group_field=>$node[$this->group_field],
                 'left_value >= ' . $node['left_value'],
                 'right_value <= ' . $node['right_value'],
             ));
             //修改移动区间内树枝的左右值
             $diff = $node['right_value'] - $node['left_value'] + 1;
-            $this->getModel()->update(array(
-                'left_value'=>new Expr('left_value - ' . $diff),
-                'right_value'=>new Expr('right_value - ' . $diff),
-            ), array(
-                'left_value > ' . $node['right_value'],
-                'right_value <= ' . $left_node['right_value'],
-                'id NOT IN('.implode(',', $branch_ids).')',
-            ));
+            $this->getModel()->incr(
+                array(
+                    $this->group_field=>$node[$this->group_field],
+                    'left_value > ' . $node['right_value'],
+                    'right_value <= ' . $left_node['right_value'],
+                    'id NOT IN('.implode(',', $branch_ids).')',
+                ),
+                array('left_value', 'right_value'),
+                - $diff
+            );
             //修改被移动树枝的左右值
             $diff = $left_node['right_value'] - $node['right_value'];
-            $this->getModel()->update(array(
-                'left_value'=>new Expr('left_value + ' . $diff),
-                'right_value'=>new Expr('right_value + ' . $diff),
-            ), 'id IN ('.implode(',', $branch_ids).')');
+            $this->getModel()->incr(
+                'id IN ('.implode(',', $branch_ids).')',
+                array('left_value', 'right_value'),
+                $diff
+            );
         }
     }
 
     /**
      * 根据顶层节点ID返回一棵树，但并不包含顶层节点本身
+     * @param int $group_id 归档ID
      * @param int $parent
      * @param string|array $fields
      * @return array
      */
-    public function getTree($parent = 0, $fields = '*'){
+    public function getTree($group_id, $parent = 0, $fields = '*'){
         $fields = new FieldsHelper($fields, '', $this->getModel()->getFields());
         if(is_int($parent) || is_string($parent)){
             if(!$parent){
                 $nodes = $this->getModel()->fetchAll(
-                    array(),
+                    array(
+                        $this->group_field=>$group_id,
+                    ),
                     array_merge($fields->getFields(), array('parent', 'left_value', 'right_value')),
                     'left_value'
                 );
                 return $this->renderTreeByParent($nodes, 0, $fields->getFields());
             }
-            $parent = $this->getOrFail($parent, 'id,left_value,right_value');
+            $parent = $this->getOrFail($parent, 'id,left_value,right_value', $group_id);
         }else if(!isset($parent['id']) || !isset($parent['left_value']) || !isset($parent['right_value'])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($parent));
         }
-        
+
         $nodes = $this->getModel()->fetchAll(
             array(
+                $this->group_field=>$group_id,
                 'left_value > ' . $parent['left_value'],
                 'right_value < ' . $parent['right_value'],
             ),
@@ -547,7 +676,7 @@ abstract class TreeModel{
             $fields->getFields()
         );
     }
-    
+
     /**
      * 根据left_value和right_value渲染出一个多维数组
      * （依靠parent构建树逻辑会清晰很多，这个方法只是为了装逼，一般不调用）
@@ -600,7 +729,7 @@ abstract class TreeModel{
         $tree = $this->mountBranch($branch, $tree, $level);
         return $tree;
     }
-    
+
     /**
      * 将一根树枝挂载到指定树的指定层级的最右侧
      * @param array $branch
@@ -642,7 +771,7 @@ abstract class TreeModel{
         foreach($tree as &$t){
             if($t['right_value'] - $t['left_value'] != 1){
                 //非叶子
-                $t['children'] = $this->renderTreeByParent($nodes, $t['id'], $fields);
+                $t['children'] = $this->renderTreeByParent($nodes, $t['id']);
             }else{
                 $t['children'] = array();
             }
@@ -656,32 +785,33 @@ abstract class TreeModel{
         }
         return $tree;
     }
-
+    
     /**
      * 判断$node1是否为$node2的子节点（是同一节点也返回true）
      * @param mixed $node1
      *  - 若为数字，视为分类ID获取分类；
-     *  - 若是数组，必须包含left_value和right_value
+     *  - 若是数组，必须包含left_value, right_value和$this->group_field字段
      * @param int|string|array $node2
      *  - 若为数字，视为分类ID获取分类；
-     *  - 若是数组，必须包含left_value和right_value
+     *  - 若是数组，必须包含left_value, right_value和$this->group_field字段
      * @return bool
      */
     public function isChild($node1, $node2){
         if(is_int($node1) || is_string($node1)){
-            $node1 = $this->getOrFail($node1, 'left_value,right_value');
-        }else if(!isset($node1['left_value']) || !isset($node1['right_value'])){
+            $node1 = $this->getOrFail($node1, array('left_value', 'right_value', $this->group_field));
+        }else if(!isset($node1['left_value']) || !isset($node1['right_value']) || !isset($node1[$this->group_field])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($node1));
         }
-        
+
         if(is_int($node2) || is_string($node2)){
-            $node2 = $this->getOrFail($node2, 'left_value,right_value');
-        }else if(!isset($node2['left_value']) || !isset($node2['right_value'])){
+            $node2 = $this->getOrFail($node2, array('left_value', 'right_value', $this->group_field));
+        }else if(!isset($node2['left_value']) || !isset($node2['right_value']) || !isset($node2[$this->group_field])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($node2));
         }
         
         return $node1['left_value'] >= $node2['left_value'] &&
-            $node1['right_value'] <= $node2['right_value'];
+            $node1['right_value'] <= $node2['right_value'] &&
+            $node1[$this->group_field] == $node2[$this->group_field];
     }
 
     /**
@@ -689,7 +819,7 @@ abstract class TreeModel{
      * 若$root为null，则会一直追溯到根节点，否则追溯到root为止
      * $node和$root都可以是：
      *  - 数字:代表分类ID;
-     *  - 数组:分类数组（必须包含left_value和right_value字段）
+     *  - 数组:分类数组（必须包含left_value, right_value和$this->group_field字段）
      * @param mixed $node
      * @param string|array $fields
      * @param mixed $root
@@ -699,34 +829,38 @@ abstract class TreeModel{
     public function getParents($node, $fields = '*', $root = null, $with_own = true){
         //确定$node
         if(is_int($node) || is_string($node)){
-            $node = $this->getOrFail($node, 'left_value,right_value');
-        }else if(!isset($node['left_value']) || !isset($node['right_value'])){
+            $node = $this->getOrFail($node, array('left_value', 'right_value', $this->group_field));
+        }else if(!isset($node['left_value']) || !isset($node['right_value']) || !isset($node[$this->group_field])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($node));
         }
-        
+
         //确定$root
         if($root){
             if(is_int($root) || is_string($root)){
-                $root = $this->getOrFail($root, 'left_value,right_value');
-            }else if(!isset($root['left_value']) || !isset($root['right_value'])){
+                $root = $this->getOrFail($root, array('left_value', 'right_value', $this->group_field));
+                if($node[$this->group_field] != $root[$this->group_field]){
+                    throw new \InvalidArgumentException('指定节点与根节点不属于同一个归档');
+                }
+            }else if(!isset($root['left_value']) || !isset($root['right_value']) || !isset($root[$this->group_field])){
                 throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($root));
             }
         }
-        
+
         return $this->getModel()->fetchAll(array(
+            $this->group_field=>$node[$this->group_field],
             'left_value <' . ($with_own ? '= ' : ' ') . $node['left_value'],
             'right_value >' . ($with_own ? '= ' : ' ') . $node['right_value'],
             'left_value > ?'=>$root ? $root['left_value'] : false,
             'right_value < ?'=>$root ? $root['right_value'] : false,
         ), $fields, 'left_value');
     }
-    
+
     /**
      * 获取指定节点的祖先节点的ID，以一位数组方式返回（包含指定节点ID）
      * 若$root为null，则会一直追溯到根节点，否则追溯到root为止
      * $node和$root都可以是：
      *  - 数字:代表分类ID;
-     *  - 数组:分类数组（节约服务器资源，少一次数据库搜索。必须包含left_value和right_value字段）
+     *  - 数组:分类数组（节约服务器资源，少一次数据库搜索。必须包含left_value, right_value和$this->group_field字段）
      * @param mixed $node
      * @param mixed $root
      * @param bool $with_own 是否包含当前节点返回
@@ -739,21 +873,28 @@ abstract class TreeModel{
     /**
      * 根据父节点ID，获取其所有子节点，返回二维数组（非树形）
      * 若不指定父节点，返回整张表
+     * @param int $group_id 归档ID
      * @param mixed $node
      * @param string|array $fields
      * @param string $order
      * @return array
      */
-    public function getChildren($node = 0, $fields = '*', $order = 'sort, id'){
+    public function getChildren($group_id, $node = 0, $fields = '*', $order = 'sort, id'){
         if(!$node){
-            return $this->getModel()->fetchAll(array(), $fields, $order);
+            return $this->getModel()->fetchAll(array(
+                $this->group_field=>$group_id,
+            ), $fields, $order);
         }else if(is_int($node) || is_string($node)){
-            $node = $this->getOrFail($node, 'left_value,right_value');
+            $node = $this->getOrFail($node, array('left_value', 'right_value', $this->group_field));
+            if($node[$this->group_field] != $group_id){
+                throw new \InvalidArgumentException("指定节点与指定归档不一致");
+            }
         }else if(!isset($node['left_value']) || !isset($node['right_value'])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($node));
         }
-        
+
         return $this->getModel()->fetchAll(array(
+            $this->group_field=>$group_id,
             'left_value > ' . $node['left_value'],
             'right_value < ' . $node['right_value'],
         ), $fields, $order);
@@ -782,12 +923,12 @@ abstract class TreeModel{
         }else if(!isset($node['parent'])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($node));
         }
-        
+
         return ($node['right_value'] - $node['left_value']) == 1;
     }
 
     /**
-     * @see CategoryService::isTerminal()
+     * @see GroupTreeModel::isTerminal()
      * @param mixed $node
      * @return bool
      */
@@ -810,7 +951,7 @@ abstract class TreeModel{
         }else if(!isset($node['parent'])){
             throw new \InvalidArgumentException('无法识别的节点格式: ' . serialize($node));
         }
-        
+
         if(!$node){
             return array();
         }
@@ -837,17 +978,22 @@ abstract class TreeModel{
      * 获取一个或多个分类。
      * @param int|string $node
      * @param string|array $fields
+     * @param null|int $group_id 归档ID。若指定归档ID，则在指定归档ID内搜索
      * @param mixed $root 若指定root，则只搜索root下的分类
      * @return array|bool
      */
-    public function get($node, $fields = '*', $root = null){
+    public function get($node, $fields = '*', $group_id = null, $root = null){
         if($root && (!isset($root['left_value']) || !isset($root['right_value']))){
             //root信息不足，尝试通过get()方法获取
-            $root = $this->getOrFail($root, 'left_value,right_value');
+            $root = $this->getOrFail($root, array('left_value', 'right_value', $this->group_field));
+            if($group_id && $root[$this->group_field] != $group_id){
+                throw new \InvalidArgumentException("指定节点与指定归档不一致");
+            }
         }
 
         $conditions = array(
             'id = ?'=>$node,
+            $this->group_field=>$group_id ? $group_id : false,
         );
         if($root){
             $conditions['left_value >= ?'] = $root['left_value'];
@@ -860,11 +1006,12 @@ abstract class TreeModel{
      * 根据id搜索记录，若未搜到结果，抛出异常
      * @param int|string $node
      * @param string|array $fields
+     * @param null|int $group_id 归档ID
      * @param mixed $root 若指定root，则只搜索root下的分类
      * @return array
      */
-    public function getOrFail($node, $fields = '*', $root = null){
-        $result = $this->get($node, $fields, $root);
+    public function getOrFail($node, $fields = '*', $group_id = null, $root = null){
+        $result = $this->get($node, $fields, $group_id, $root);
         if(!$result){
             throw new \RuntimeException("指定节点[{$node}]不存在");
         }

@@ -58,14 +58,14 @@ class Sql{
                 $alias = $a;
             }else{
                 if($t instanceof Sql){
-                    throw new ErrorException('子查询必须设置别名');
+                    throw new \ErrorException('子查询必须设置别名');
                 }
                 $alias = $t;
             }
             $short_name = $t;
         }else{
             if($table instanceof Sql){
-                throw new ErrorException('子查询必须设置别名');
+                throw new \ErrorException('子查询必须设置别名');
             }
             $short_name = $table;
             $alias = $table;
@@ -256,7 +256,7 @@ class Sql{
         }
         //where
         if($this->conditions){
-            $where = $this->db->getWhere($this->conditions);
+            $where = $this->db->formatConditions($this->conditions);
             $sql .= "WHERE \n{$where['condition']} \n";
             $this->params = array_merge($this->params, $where['params']);
         }
@@ -266,7 +266,7 @@ class Sql{
         }
         //having
         if($this->having){
-            $having = $this->db->getWhere($this->having);
+            $having = $this->db->formatConditions($this->having);
             $sql .= "HAVING \n{$having['condition']} \n";
             $this->params = array_merge($this->params, $having['params']);
         }
@@ -336,7 +336,7 @@ class Sql{
         }
         //where
         if($this->conditions){
-            $where = $this->db->getWhere($this->conditions);
+            $where = $this->db->formatConditions($this->conditions);
             $sql .= "WHERE {$where['condition']} \n";
             $this->params = array_merge($this->params, $where['params']);
         }
@@ -398,7 +398,7 @@ class Sql{
             }
             foreach($fields as $f){
                 $f_arr = explode(',', $f);
-                if(!empty($table)){
+                if($table){
                     foreach($f_arr as &$fa){
                         if(!preg_match('/^\w+\(.*\).*$/', $fa)){//聚合函数不加前缀
                             $fa = trim($fa);
@@ -434,7 +434,7 @@ class Sql{
         }
         
         $full_table_name = $this->db->getFullTableName($short_name);
-        $where = $this->db->getWhere($conditions);
+        $where = $this->db->formatConditions($conditions);
         $this->join[] = array(
             'type'=>$type,
             'table'=>$full_table_name,
@@ -450,7 +450,7 @@ class Sql{
     /**
      * 通过不停加后缀空格的方式，使关键词的键名不重名
      * @param string $key
-     * @param string $conditions
+     * @param array $conditions
      * @return string
      */
     private function getConditionKey($key, $conditions){

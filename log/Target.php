@@ -1,8 +1,7 @@
 <?php
 namespace fay\log;
 
-use fay\core\ErrorException;
-use fay\helpers\RequestHelper;
+use fay\core\Request;
 
 abstract class Target{
     /**
@@ -45,7 +44,7 @@ abstract class Target{
     
     /**
      * 过滤掉该容器不记录的日志，并将记录写入容器
-     * @param string $messages
+     * @param array $messages
      */
     public function collect($messages){
         $messages = $this->filterMessages($messages);
@@ -64,7 +63,6 @@ abstract class Target{
     /**
      * 设置当前日志容器会记录的日志等级
      * @param int $levels
-     * @throws ErrorException
      */
     public function setLevels($levels){
         static $levelMap = array(
@@ -78,7 +76,7 @@ abstract class Target{
                 if (isset($levelMap[$level])) {
                     $this->_levels |= $levelMap[$level];
                 } else {
-                    throw new ErrorException("指定的日志等级不存在: $level");
+                    throw new \UnexpectedValueException("指定的日志等级不存在: $level");
                 }
             }
         } else {
@@ -136,7 +134,7 @@ abstract class Target{
             $text = var_export($text, true);
         }
         
-        $ip = RequestHelper::getIP();
+        $ip = Request::getUserIP();
         //并不是所有情况下都能获取到用户ID，所以这只是个参考
         $user = empty(\F::app()->current_user) ? 'no login' : 'user:' . \F::app()->current_user;
         

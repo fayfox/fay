@@ -132,12 +132,11 @@ class Form{
      * @param array $data
      * @param bool $cover 如果key已存在，是否覆盖
      * @return Form
-     * @throws Exception
      */
     public function setData($data, $cover = false){
         if(!is_array($data)){
             //数据格式非法，抛出异常
-            throw new Exception('fay\core\Form::setData第一个参数必须是数组', '<code>'.var_export($data, true).'</code>');
+            throw new \InvalidArgumentException('fay\core\Form::setData第一个参数必须是数组', '<code>'.var_export($data, true).'</code>');
         }
         if($this->_data === null){
             $this->_data = array();
@@ -450,7 +449,7 @@ class Form{
                     if(isset($r[2]['ajax'])){
                         $params = isset($r[2]['ajax'][1]) ? $r[2]['ajax'][1] : array();
                         if(isset($r[2]['except'])){
-                            $params[$r[2]['except']] = \F::app()->input->request($r[2]['except']);
+                            $params[$r[2]['except']] = \F::input()->request($r[2]['except']);
                         }
                         $js_rules[$field]['ajax'] = UrlHelper::createUrl($r[2]['ajax'][0], $params);
                     }
